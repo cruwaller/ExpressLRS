@@ -51,7 +51,8 @@ uint8_t *CRSF::ParseInByte(uint8_t inChar)
     {
         if ((inChar == CRSF_ADDRESS_CRSF_RECEIVER) ||
             (inChar == CRSF_ADDRESS_CRSF_TRANSMITTER) ||
-            (inChar == CRSF_SYNC_BYTE))
+            (inChar == CRSF_SYNC_BYTE) ||
+            (inChar == CRSF_ADDRESS_BROADCAST))
         {
             CRSFframeActive = true;
             SerialInPacketLen = 0;
