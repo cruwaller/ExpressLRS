@@ -395,6 +395,7 @@ public:
 protected:
     uint8_t *ParseInByte(uint8_t inChar);
     virtual void LinkStatisticsSend(LinkStatsLink_t & stats) const = 0;
+    virtual uint8_t TypeIsValid(uint8_t const type) const = 0;
 
     HwSerial * const _dev;
 
@@ -403,6 +404,12 @@ protected:
     uint32_t BadPktsCount;
 
 private:
+    inline void reset_rx(void) {
+        CRSFframeActive = false;
+        SerialInPacketPtr = 0;
+        SerialInPacketLen = 0;
+    }
+
     bool CRSFframeActive;
     uint8_t SerialInCrc;
     uint8_t SerialInPacketStart;

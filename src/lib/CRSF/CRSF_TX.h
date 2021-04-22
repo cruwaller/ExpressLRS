@@ -72,6 +72,18 @@ private:
     void GpsSensorProcess(void);
     void LuaResponseProcess(void) const;
 
+    uint8_t TypeIsValid(uint8_t const type) const {
+        switch (type) {
+            /* TX */
+            case CRSF_FRAMETYPE_RC_CHANNELS_PACKED:
+            case CRSF_FRAMETYPE_PARAMETER_WRITE:
+            case CRSF_FRAMETYPE_MSP_REQ:
+            case CRSF_FRAMETYPE_MSP_WRITE:
+                return 1;
+        }
+        return 0;
+    }
+
 #if (FEATURE_OPENTX_SYNC)
 
 #define OTX_SYNC_INTERVAL   200 // in ms

@@ -75,8 +75,7 @@ uint8_t *CRSF::ParseInByte(uint8_t inChar)
             if ((SerialInPacketLen < 2) || (CRSF_FRAME_SIZE_MAX < SerialInPacketLen))
             {
                 // failure -> discard
-                CRSFframeActive = false;
-                SerialInPacketPtr = 0;
+                reset_rx();
                 BadPktsCount++;
             }
         }
@@ -113,12 +112,14 @@ uint8_t *CRSF::ParseInByte(uint8_t inChar)
 #endif
 
                 // packet handled, start next
-                CRSFframeActive = false;
-                SerialInPacketPtr = 0;
-                SerialInPacketLen = 0;
+                reset_rx();
             }
             else
             {
+                if (current_len == 1 && !TypeIsValid(inChar)) {
+                    // failure -> discard
+                    reset_rx();
+                }
                 // Calc crc on the fly
                 SerialInCrc = CalcCRC8(inChar, SerialInCrc, CRSF_GEN_POLY);
             }

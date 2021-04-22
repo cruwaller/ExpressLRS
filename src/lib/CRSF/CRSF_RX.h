@@ -30,6 +30,18 @@ public:
 private:
     void sendFrameToFC(uint8_t *buff, uint8_t size) const;
     void processPacket(uint8_t const *data);
+    uint8_t TypeIsValid(uint8_t const type) const {
+        switch (type) {
+            /* RX */
+            case CRSF_FRAMETYPE_COMMAND:
+            case CRSF_FRAMETYPE_DEVICE_INFO:
+            case CRSF_FRAMETYPE_BATTERY_SENSOR:
+            case CRSF_FRAMETYPE_GPS:
+            case CRSF_FRAMETYPE_MSP_RESP:
+                return 1;
+        }
+        return 0;
+    }
 
     uint8_t new_baud_ok;
 };
