@@ -14,7 +14,7 @@ print("BUILD ENV: '%s'" % target_name)
 
 # don't overwrite if custom command defined
 if stm and "$UPLOADER $UPLOADERFLAGS" in env.get('UPLOADCMD', '$UPLOADER $UPLOADERFLAGS'):
-    if "TX_R9M" in target_name or "TX_ES915TX" in target_name:
+    if "TX_R9M" in target_name or "TX_ES915TX" in target_name or "TX_GHOST" in target_name:
         env.AddPostAction("buildprog", opentx.gen_elrs)
         env.AddPreAction("upload", opentx.gen_elrs)
         if "WIFI" in target_name:
