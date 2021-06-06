@@ -553,6 +553,7 @@ int8_t SettingsCommandHandle(uint8_t const *in, uint8_t *out,
         if ((modified & (1 << 1)) == 0) {
             stop_processing();
         }
+        CrsfSerial.end();
 
         // Save modified values
         uint8_t type = pl_config.rf_mode;
@@ -561,6 +562,8 @@ int8_t SettingsCommandHandle(uint8_t const *in, uint8_t *out,
         pl_config.rf[type].power = PowerMgmt.currPower();
         pl_config.rf[type].tlm = TLMinterval;
         platform_config_save(pl_config);
+
+        CrsfSerial.Begin(400000);
 
         // and restart timer
         TxTimer.start();

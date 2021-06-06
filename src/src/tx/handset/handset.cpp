@@ -184,10 +184,17 @@ void setup()
     }
     /** Set default gimbal ranges */
     struct gimbal_limit gimbal_limit[TX_NUM_ANALOGS] = {
+#if (HANDSET_GIMBALS == GIMBALS_NV14)
+        {0, 2047, 4095}, // L1
+        {0, 2047, 4095}, // L2
+        {0, 2047, 4095}, // R1
+        {0, 2047, 4095}, // R2
+#else
         {900, 2196, 3536}, // L1
         {194, 2023, 3796}, // L2
         {183, 1860, 3628}, // R1
         {490, 2094, 3738}, // R2
+#endif
     };
     memcpy(pl_config.gimbals, gimbal_limit, sizeof(gimbal_limit));
 

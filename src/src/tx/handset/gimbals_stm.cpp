@@ -19,6 +19,9 @@
 #include "stm32f7xx_ll_gpio.h"
 #endif
 
+#if (HANDSET_GIMBALS == GIMBALS_ANALOG)
+
+
 /** Filter types */
 #define FILTER_1AUD 1
 #define FILTER_NO   2
@@ -79,7 +82,8 @@ static struct gpio_out debug_pin;
  *  [ 8...11] = channel3
  *  [12...15] = channel4
 */
-static uint16_t DMA_ATTR RawVals[NUM_ANALOGS * 4];
+#define OVERSAMPLES 4
+static uint16_t DMA_ATTR raw_values[NUM_ANALOGS * OVERSAMPLES];
 
 #define DEBUG_VARS 0
 #if DEBUG_VARS
@@ -155,13 +159,19 @@ void FAST_CODE_1 handle_dma_isr(void)
 {
     uint32_t val;
     uint_fast8_t iter, index;
-    for (iter = 0; iter < ARRAY_SIZE(RawVals); iter+=4) {
-        val = RawVals[iter];
-        val += RawVals[iter+1];
-        val += RawVals[iter+2];
-        val += RawVals[iter+3];
-        val /= NUM_ANALOGS;
-        index = iter / NUM_ANALOGS;
+    for (iter = 0; iter < ARRAY_SIZE(raw_values); iter+=OVERSAMPLES) {
+        val = raw_values[iter];
+#if 1 < OVERSAMPLES
+        val += raw_values[iter+1];
+#endif
+#if 2 < OVERSAMPLES
+        val += raw_values[iter+2];
+#endif
+#if 3 < OVERSAMPLES
+        val += raw_values[iter+3];
+#endif
+        val /= OVERSAMPLES;
+        index = iter / OVERSAMPLES;
 #if DEBUG_VARS
         DEBUG_VAL[index] = val;
 #endif
@@ -255,10 +265,10 @@ static void configure_dma(void) {
 
     // Set DMA transfer addresses.
     WRITE_REG(DMA2_Stream0->PAR, (uint32_t)&(ADC1->DR));
-    WRITE_REG(DMA2_Stream0->M0AR, (uint32_t)&RawVals[0]);
+    WRITE_REG(DMA2_Stream0->M0AR, (uint32_t)&raw_values[0]);
 
     // Set DMA transfer size.
-    MODIFY_REG(DMA2_Stream0->NDTR, DMA_SxNDT, ARRAY_SIZE(RawVals));
+    MODIFY_REG(DMA2_Stream0->NDTR, DMA_SxNDT, ARRAY_SIZE(raw_values));
 
     // Enable DMA interrupts.
     NVIC_SetPriority(DMA2_Stream0_IRQn, ISR_PRIO_ADC);
@@ -446,6 +456,8 @@ gimbals_get(uint16_t * const out)
     }
 }
 
+void FAST_CODE_1 gimbals_process_loop(void) { /*dummy*/ }
+
 uint8_t gimbals_calibrate_mid_point(uint8_t idx)
 {
     uint32_t value = 0, current;
@@ -513,21 +525,4 @@ uint8_t gimbals_calibrate(uint8_t * data)
     return 1;
 }
 
-uint8_t gimbals_adjust_min(uint16_t val, uint8_t idx)
-{
-    if (idx < GIMBAL_IDX_MAX)
-        pl_config.gimbals[idx].low = val;
-    return 0;
-}
-uint8_t gimbals_adjust_mid(uint16_t val, uint8_t idx)
-{
-    if (idx < GIMBAL_IDX_MAX)
-        pl_config.gimbals[idx].mid = val;
-    return 0;
-}
-uint8_t gimbals_adjust_max(uint16_t val, uint8_t idx)
-{
-    if (idx < GIMBAL_IDX_MAX)
-        pl_config.gimbals[idx].high = val;
-    return 0;
-}
+#endif /* HANDSET_GIMBALS == GIMBALS_ANALOG */
