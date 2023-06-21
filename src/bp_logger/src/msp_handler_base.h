@@ -68,12 +68,13 @@ public:
     //
     // VTX freq control
     //
-    virtual void vtxFrequencySet(uint16_t const freq, bool const disable_change = false)
+    virtual void vtxFrequencySet(uint16_t const freq, int8_t const power = -1, bool const disable_change = false)
     {
         if (storeVtxFreq(NULL, freq, disable_change)) {
-            handleVtxFrequencyCommand(freq, NULL);
-            webUiSendVtxFrequency(freq);    // Update web UI
-            espnow_vtxset_send(freq);       // inform other peers
+            vtx_params_t const params = {.freq = freq, .power = power, .pitmode = false};
+            handleVtxFrequencyCommand(params, NULL);
+            webUiSendVtxFrequency(freq);        // Update web UI
+            espnow_vtxset_send(freq, power);    // inform other peers
         }
         m_vtx_set_disabled = disable_change;
     }
@@ -152,7 +153,13 @@ protected:
     parseCommandPriv(websoc_bin_hdr_t const * const cmd, size_t len, AsyncWebSocketClient * const client) = 0;
     virtual int parseCommandPriv(mspPacket_t & msp_in) = 0;
 
-    virtual void handleVtxFrequencyCommand(uint16_t const freq, AsyncWebSocketClient * const client) = 0;
+    typedef struct {
+        uint16_t freq;
+        int8_t power;
+        bool pitmode;
+    } vtx_params_t;
+
+    virtual void handleVtxFrequencyCommand(vtx_params_t params, AsyncWebSocketClient * const client) = 0;
 
     virtual void handleLaptimerState(uint16_t const race_id,
                                      uint16_t const round_num,

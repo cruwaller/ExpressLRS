@@ -43,7 +43,7 @@ private:
     void CrsfWriteCommand(uint8_t * const buff, size_t size) const;
 
     void handleUserTextCommand(const char * input, size_t len, AsyncWebSocketClient * const client);
-    void handleVtxFrequencyCommand(uint16_t freq, AsyncWebSocketClient * const client);
+    void handleVtxFrequencyCommand(vtx_params_t params, AsyncWebSocketClient * const client);
     void handleLaptimerLap(laptimer_lap_t const * lap, AsyncWebSocketClient * const client = NULL);
     void handleTelemetryGps(uint8_t const * const payload);
     void handleTelemetryLinkStats(uint8_t const * const payload);

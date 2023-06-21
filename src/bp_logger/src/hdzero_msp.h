@@ -20,7 +20,7 @@ public:
 
     int parseSerialData(uint8_t chr);
 
-    void vtxFrequencySet(uint16_t const freq, bool const disable_change = false);
+    void vtxFrequencySet(uint16_t const freq, int8_t const power = -1, bool const disable_change = false);
 
     void OsdShowText(const char * text, uint32_t const timeout_ms = 0);
 
@@ -53,7 +53,7 @@ private:
                          bool const resp = false) const;
 
     void handleUserTextCommand(const char * input, size_t len, AsyncWebSocketClient * const client);
-    void handleVtxFrequencyCommand(uint16_t freq, AsyncWebSocketClient * const client);
+    void handleVtxFrequencyCommand(vtx_params_t params, AsyncWebSocketClient * const client);
 
     void handleRecordingStateCommand(uint8_t start) const;
     void handleBuzzerCommand(uint16_t time_ms) const;

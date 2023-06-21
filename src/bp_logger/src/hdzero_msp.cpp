@@ -259,7 +259,7 @@ int HDZeroMsp::parseSerialData(uint8_t const chr)
 
                     webUiSendVtxFrequency(freq);
 #if LOGGER_HDZERO_USE_VTX_INDEX
-                    espnow_vtxset_send(msp_in.payload[0]);
+                    espnow_vtxset_send(band_channel);
 #else
                     espnow_vtxset_send(freq);
 #endif
@@ -295,12 +295,13 @@ int HDZeroMsp::parseSerialData(uint8_t const chr)
     return 0;
 }
 
-void HDZeroMsp::vtxFrequencySet(uint16_t const freq, bool const disable_change)
+void HDZeroMsp::vtxFrequencySet(uint16_t const freq, int8_t const power, bool const disable_change)
 {
     m_vtx_set_disabled = disable_change;
     if (storeVtxFreq(NULL, freq, disable_change)) {
         // Adjust VRx
-        handleVtxFrequencyCommand(freq, NULL);
+        vtx_params_t const params = {.freq = freq, .power = power, .pitmode = false};
+        handleVtxFrequencyCommand(params, NULL);
         delay(2);
         // ... GUI is updated when channel query resp is received
 #if LOGGER_HDZERO_USE_VTX_INDEX
@@ -308,6 +309,8 @@ void HDZeroMsp::vtxFrequencySet(uint16_t const freq, bool const disable_change)
 #else
         getFrequency();
 #endif
+        // TODO: forward over esp-now?
+        espnow_vtxset_send(freq, (int8_t)power);
     }
 }
 
@@ -459,7 +462,7 @@ void HDZeroMsp::handleUserTextCommand(const char * input, size_t const len, Asyn
     osdText(input, len, 4, 0); // DEBUG
 }
 
-void HDZeroMsp::handleVtxFrequencyCommand(uint16_t const freq, AsyncWebSocketClient * const client)
+void HDZeroMsp::handleVtxFrequencyCommand(vtx_params_t const params, AsyncWebSocketClient * const client)
 {
     // Send to HDZero
 #if LOGGER_HDZERO_USE_VTX_INDEX
@@ -468,7 +471,7 @@ void HDZeroMsp::handleVtxFrequencyCommand(uint16_t const freq, AsyncWebSocketCli
         return;
     sendMspToHdzero(&chan_index, 1, HDZ_MSP_FUNC_BAND_CHANNEL_INDEX_SET);
 #else
-    uint8_t payload[] = {(uint8_t)(freq & 0xff), (uint8_t)(freq >> 8)};
+    uint8_t payload[] = {(uint8_t)(params.freq & 0xff), (uint8_t)(params.freq >> 8)};
     sendMspToHdzero(payload, sizeof(payload), HDZ_MSP_FUNC_FREQUENCY_SET);
 #endif
 }
@@ -598,10 +601,6 @@ void HDZeroMsp::handleLaptimerLap(laptimer_lap_t const * lap, AsyncWebSocketClie
 void HDZeroMsp::checkFreqFromModule(uint16_t const freq) const
 {
     webUiSendVtxFrequency(freq);
-#if LOGGER_HDZERO_USE_VTX_INDEX
-    espnow_vtxset_send(msp_in.payload[0]);
-#else
     espnow_vtxset_send(freq);
-#endif
     storeVtxFreq(NULL, freq);
 }

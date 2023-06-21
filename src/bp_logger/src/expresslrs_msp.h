@@ -7,6 +7,7 @@ class ExpresslrsMsp : public MspHandlerBase
 public:
     ExpresslrsMsp(CtrlSerial * serial) : MspHandlerBase(serial)
     {
+        vtx_power = -1;
     }
     ~ExpresslrsMsp()
     {
@@ -32,6 +33,8 @@ private:
     uint8_t settings_region;
     uint8_t settings_valid;
 
+    int8_t vtx_power;
+
 #if CONFIG_HANDSET
     /* Handset specific data */
     struct gimbal_limit gimbals[TX_NUM_ANALOGS];
@@ -47,7 +50,7 @@ private:
     int parseCommandPriv(websoc_bin_hdr_t const * const cmd, size_t len, AsyncWebSocketClient * const client);
     int parseCommandPriv(mspPacket_t & msp_in);
 
-    void handleVtxFrequencyCommand(uint16_t freq, AsyncWebSocketClient * const client);
+    void handleVtxFrequencyCommand(vtx_params_t params, AsyncWebSocketClient * const client);
 
     void elrsSettingsSend(uint8_t const * buff, uint8_t len);
     void elrsSendMsp(uint8_t const * buff, uint8_t len, uint8_t function);

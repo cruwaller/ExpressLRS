@@ -376,8 +376,8 @@ int esp_now_msp_rcvd(mspPacket_t & msp_pkt)
 #endif
                     eeprom_storage.laptimer_config.index = p_command->register_resp.node_index;
 
-                    msp_handler.OsdShowText(info, 10000);  // 10sec
-                    msp_handler.vtxFrequencySet(freq, true);
+                    msp_handler.OsdShowText(info, 10000); // 10sec
+                    msp_handler.vtxFrequencySet(freq, 0, true); // force 25mW
 
                     if (current_state == STATE_LAPTIMER_WAIT)
                         current_state = STATE_RUNNING;

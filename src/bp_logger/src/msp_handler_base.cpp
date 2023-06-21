@@ -11,7 +11,8 @@ int MspHandlerBase::parseCommand(websoc_bin_hdr_t const * const cmd,
             }
             uint16_t const freq = parseFreq(cmd->payload);
             if (storeVtxFreq(client, freq)) {
-                handleVtxFrequencyCommand(freq, client);
+                vtx_params_t const params = {.freq = freq, .power = -1, .pitmode = false};
+                handleVtxFrequencyCommand(params, client);
 #if LOGGER_HDZERO_USE_VTX_INDEX
                 int8_t const chan_index = getIndexByFreq(freq);
                 if (0 <= chan_index)
@@ -55,7 +56,16 @@ int MspHandlerBase::parseCommand(mspPacket_t & msp_in)
         if (msp_in.function == MSP_VTX_SET_CONFIG && 2 <= msp_in.payloadSize) {
             uint16_t const freq = parseFreq(msp_in.payload);
             if (storeVtxFreq(NULL, freq)) {
-                handleVtxFrequencyCommand(freq, NULL);
+                vtx_params_t params = {.freq = freq, .power = -1, .pitmode = false};
+                if (2 <= msp_in.payloadSize) {
+                    // Read power
+                    params.power = msp_in.payload[2];
+                }
+                if (3 <= msp_in.payloadSize) {
+                    // Read pitmode status
+                    params.pitmode = !!msp_in.payload[3];
+                }
+                handleVtxFrequencyCommand(params, NULL);
                 /* Infrom web clients */
                 webUiSendVtxFrequency(freq);
             }

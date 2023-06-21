@@ -344,17 +344,18 @@ void FAST_CODE_2 espnow_send_msp(mspPacket_t & msp)
 #endif // ESP_NOW
 }
 
-void espnow_vtxset_send(uint16_t const freq, int8_t const power, int8_t const pitmode)
+void espnow_vtxset_send(uint16_t const freq, int8_t const power, bool const pitmode)
 {
 #if ESP_NOW
     uint8_t size = 2; // Default is only freq
-    uint8_t set[4] = {(uint8_t)freq, (uint8_t)(freq >> 8)};
-    if (0 <= power)
-        set[size++] = power;
-    if (0 <= pitmode)
-        set[size++] = !!pitmode;
+    uint8_t command[4] = {(uint8_t)freq, (uint8_t)(freq >> 8)};
+    if (0 <= power) {
+        command[2] = power;
+        command[3] = pitmode;
+        size = 4;
+    }
     size_t const len = MSP::bufferPacket(msp_tx_buffer, MSP_PACKET_V2_COMMAND, MSP_VTX_SET_CONFIG,
-                                         (uint8_t)eeprom_storage.laptimer_config.index, size, set);
+                                         (uint8_t)eeprom_storage.laptimer_config.index, size, command);
     if (len) {
         esp_now_send(NULL, msp_tx_buffer, len);
     }

@@ -20,7 +20,7 @@ String & espnow_get_info(void);
 void espnow_send_msp(mspPacket_t & msp);
 void espnow_send_update_channel(uint8_t const channel);
 
-void espnow_vtxset_send(uint16_t const freq, int8_t const power = -1, int8_t const pitmode = -1);
+void espnow_vtxset_send(uint16_t const freq, int8_t const power = -1, bool const pitmode = false);
 
 void espnow_laptimer_register_send(void);
 void espnow_laptimer_start_send(uint16_t node_id);

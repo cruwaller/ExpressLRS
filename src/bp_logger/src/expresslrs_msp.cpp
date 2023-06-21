@@ -156,13 +156,19 @@ void ExpresslrsMsp::elrsSettingsSendEvent(AsyncEventSourceClient * const client)
     async_event_send(json, "fea_config", client);
 }
 
-void ExpresslrsMsp::handleVtxFrequencyCommand(uint16_t freq, AsyncWebSocketClient * const client)
+void ExpresslrsMsp::handleVtxFrequencyCommand(vtx_params_t const params, AsyncWebSocketClient * const client)
 {
+    vtx_power = params.power;
+
     // Send to ELRS
-    uint8_t payload[] = {(uint8_t)(freq & 0xff), (uint8_t)(freq >> 8)};
-    // payload[2] = power;
-    // payload[3] = (power == 0); // pit mode
-    elrsSendMsp(payload, sizeof(payload), MSP_VTX_SET_CONFIG);
+    uint8_t payload[4] = {(uint8_t)(params.freq & 0xff), (uint8_t)(params.freq >> 8)};
+    uint8_t size = 2;
+    if (0 <= params.power) {
+        payload[2] = params.power;
+        payload[3] = params.pitmode;
+        size += 2;
+    }
+    elrsSendMsp(payload, size, MSP_VTX_SET_CONFIG);
 
     // Request save to make set permanent
     // msp_send_save_requested_ms = millis();
@@ -617,8 +623,11 @@ int ExpresslrsMsp::parseSerialData(uint8_t const chr)
                 case ELRS_INT_MSP_DEV_INFO: {
                     info += "device info";
                     // Respond with the VTX config
-                    if (payload[0] == 1 && payload[1] < 3)
-                        handleVtxFrequencyCommand(eeprom_storage.vtx_freq, NULL);
+                    if (payload[0] == 1 && payload[1] < 3) {
+                        vtx_params_t const params = {
+                            .freq = eeprom_storage.vtx_freq, .power = vtx_power, .pitmode = false};
+                        handleVtxFrequencyCommand(params, NULL);
+                    }
                     break;
                 }
 #if CONFIG_HANDSET

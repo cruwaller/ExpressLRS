@@ -385,7 +385,7 @@ void TbsFusion::handleUserTextCommand(const char * input, size_t const len, Asyn
     websocket_send_txt(dbg_info);
 }
 
-void TbsFusion::handleVtxFrequencyCommand(uint16_t const freq, AsyncWebSocketClient * const client)
+void TbsFusion::handleVtxFrequencyCommand(vtx_params_t const params, AsyncWebSocketClient * const client)
 {
     struct crsf_freq_set {
         crsf_ext_header_t header;
@@ -404,8 +404,8 @@ void TbsFusion::handleVtxFrequencyCommand(uint16_t const freq, AsyncWebSocketCli
     command.tlm_type = CRSF_TLM_TYPE_VTX;
     command.dest_addr = CRSF_ADDRESS_VRX;
     command.orig_addr = CRSF_ADDRESS_TBS_AGENT;
-    command.freq[0] = freq >> 8;   // freq byte 1
-    command.freq[1] = freq & 0xFF; // freq byte 2
+    command.freq[0] = params.freq >> 8;   // freq byte 1
+    command.freq[1] = params.freq & 0xFF; // freq byte 2
     command.dummy = 1;             // What is this ???
     CrsfWrite((uint8_t *)&command, sizeof(command));
 }
