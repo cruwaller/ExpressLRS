@@ -29,6 +29,7 @@ void GpsSensorSend(void);
 static void FAST_CODE_1
 rc_data_collect(uint32_t const current_us)
 {
+    uint8_t num_channels = switches_get_available();
 #ifdef DBG_PIN
     gpio_out_write(debug, 1);
 #endif
@@ -45,7 +46,7 @@ rc_data_collect(uint32_t const current_us)
 #endif
             ANALOG_MIN_VAL;
     uint16_t gimbals[TX_NUM_ANALOGS];
-    uint16_t aux[NUM_SWITCHES] = {0};
+    uint16_t aux[num_channels] = {0};
     uint16_t scale;
     uint8_t iter, index;
     gimbals_timer_adjust(current_us);
@@ -71,20 +72,22 @@ rc_data_collect(uint32_t const current_us)
     }
     // get AUX channel positions
     switches_collect(aux);
-    for (iter = 0; iter < NUM_SWITCHES; iter++) {
+    for (iter = 0; iter < num_channels; iter++) {
         if (pl_config.mixer[(iter + 4)].inv) {
             index = pl_config.mixer[(iter + 4)].index;
             aux[index] = SWITCH_MAX - aux[index];
         }
     }
+    num_channels += TX_NUM_ANALOGS;
     // mix AUX channels into output buffer
-    for (iter = 4; iter < (TX_NUM_ANALOGS + NUM_SWITCHES); iter++) {
+    for (iter = TX_NUM_ANALOGS; iter < num_channels; iter++) {
         rc_data.ch[iter] = aux[pl_config.mixer[iter].index];
     }
     // process channel data into OTA packet
 #if OTA_VANILLA_ENABLED
     if (pl_config.rf_mode == RADIO_TYPE_128x_VANILLA) {
-        for (iter = 4; iter < (TX_NUM_ANALOGS + NUM_SWITCHES); iter++) {
+        // map range for vanilla code
+        for (iter = TX_NUM_ANALOGS; iter < num_channels; iter++) {
             rc_data.ch[iter] = MAP_U16(rc_data.ch[iter],
                     SWITCH_MIN, SWITCH_MAX,
                     channelMin, channelMax);

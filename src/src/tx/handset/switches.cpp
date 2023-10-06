@@ -96,6 +96,10 @@ struct switch_init switch_gpios[] = {
 
 constexpr uint8_t num_switches = ARRAY_SIZE(switch_gpios);
 
+/* Paranoia... make sure the switch count is correct */
+static_assert(MAX_NUM_SWITCHES == num_switches,
+              "Invalid switch count! Check config...");
+
 struct switch_pins {
     struct gpio_in low;
     struct gpio_in high;
@@ -107,9 +111,10 @@ void switches_init(void)
 {
     uint8_t iter;
     for (iter = 0; iter < num_switches; iter++) {
-        switches[iter].low =
-            gpio_in_setup(switch_gpios[iter].low, 1);
-
+        if (switch_gpios[iter].low != UNDEF_PIN) {
+            switches[iter].low =
+                gpio_in_setup(switch_gpios[iter].low, 1);
+        }
         if (switch_gpios[iter].high != UNDEF_PIN) {
             switches[iter].high =
                 gpio_in_setup(switch_gpios[iter].high, 1);
@@ -122,9 +127,10 @@ void FAST_CODE_1 switches_collect(uint16_t * const out)
     uint16_t value;
     uint8_t iter;
     for (iter = 0; iter < num_switches; iter++) {
-        if (!gpio_in_read(switches[iter].low))
+        if (gpio_in_valid(switches[iter].low) &&
+            !gpio_in_read(switches[iter].low))
             value = SWITCH_MIN;
-        else if (!gpio_in_valid(switches[iter].high) ||
+        else if (gpio_in_valid(switches[iter].high) &&
                  !gpio_in_read(switches[iter].high))
             value = SWITCH_MAX;
         else

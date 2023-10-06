@@ -6,5 +6,5 @@
 
 typedef union {
     rc_channels_handset_t ota_pkt;
-    uint16_t ch[TX_NUM_ANALOGS + NUM_SWITCHES];
+    uint16_t ch[TX_NUM_ANALOGS + MAX_NUM_SWITCHES];
 } rc_channels_internal_u;

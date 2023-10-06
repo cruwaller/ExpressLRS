@@ -808,13 +808,13 @@ int ExpresslrsMsp::parseCommandPriv(websoc_bin_hdr_t const * const cmd,
         }
         case WSMSGID_HANDSET_LAPTIMER_AUX: {
             uint8_t const aux_id = cmd->payload[0];
-            eeprom_storage.laptimer_start_stop_aux = (aux_id < NUM_SWITCHES) ? aux_id : UINT32_MAX;
+            eeprom_storage.laptimer_start_stop_aux = (aux_id < MAX_NUM_SWITCHES) ? aux_id : UINT32_MAX;
             eeprom_storage.markDirty();
             break;
         }
         case WSMSGID_HANDSET_RECORDING_AUX: {
             uint8_t const aux_id = cmd->payload[0];
-            eeprom_storage.recording_start_stop_aux = (aux_id < NUM_SWITCHES) ? aux_id : UINT32_MAX;
+            eeprom_storage.recording_start_stop_aux = (aux_id < MAX_NUM_SWITCHES) ? aux_id : UINT32_MAX;
             eeprom_storage.markDirty();
             break;
         }
