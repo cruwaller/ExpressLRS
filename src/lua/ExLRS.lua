@@ -8,7 +8,7 @@
   Original author: AlessandroAU.
 ]] --
 
-local version = 'v0.3'
+local version = 'v0.4'
 local gotFirstResp = false
 local GIT_SHA = '?????? '
 local HEX_TO_STR = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'}
@@ -22,8 +22,8 @@ local SX128x_RATES = {
     values = {0x00, 0x01, 0x02, 0x03},
 }
 local SX128x_RATES_FLRC = {
-    list = {'500 Hz'},
-    values = {0x00},
+    list = {'500 Hz', '250 Hz'},
+    values = {0x00, 0x01},
 }
 
 local AirRate = {
@@ -56,14 +56,25 @@ local MaxPower = {
     max_allowed = 9,
 }
 
+local RFunitAll = {
+    list = {' 900 (LoRa)', '2400 (LoRa)', '2400 (FLRC)'},
+    values = {0x00, 0x03, 0x05},
+}
+
+local RFunitSX128x = {
+    list = {'2400 (LoRa)', '2400 (FLRC)'},
+    values = {0x03, 0x05},
+}
+
 local RFunit = {
     index = 4,
     editable = false,
     name = 'RF unit',
     selected = 99,
-    list = {' 900 (LoRa)', '2400 (LoRa)', '2400 (FLRC)'},
-    values = {0x00, 0x03, 0x05},
-    max_allowed = 3,
+    list = RFunitAll.list,
+    values = RFunitAll.values,
+    max_allowed = #RFunitAll.values,
+    offset = 0,
 }
 
 local function binding(item, event)
@@ -265,19 +276,28 @@ local function processResp()
                     if bit32.band(rfmode,0x80) == 0x80 then
                         RFunit.editable = true
                     else
-                        RFunit.editable = false
+                        if bit32.band(rfmode,0x20) == 0x20 then
+                            -- FLRC supported
+                            RFunit.list = RFunitSX128x.list
+                            RFunit.values = RFunitSX128x.values
+                            RFunit.max_allowed = #RFunitSX128x.values
+                            RFunit.offset = 1
+                            RFunit.editable = true
+                        else
+                            RFunit.editable = false
+                        end
                     end
-                    rfmode = bit32.band(rfmode,0x3f)
+                    rfmode = bit32.band(rfmode,0x1f)
 
                     if rfmode == 3 or rfmode == 4 then
                         -- ISM 2400 band (SX128x), LoRa
-                        RFunit.selected = 2
+                        RFunit.selected = 2 - RFunit.offset
                         AirRate.list = SX128x_RATES.list
                         AirRate.values = SX128x_RATES.values
                         AirRate.max_allowed = #SX128x_RATES.values
                     elseif rfmode == 5 then
                         -- ISM 2400 band (SX128x), FLRC
-                        RFunit.selected = 3
+                        RFunit.selected = 3 - RFunit.offset
                         AirRate.list = SX128x_RATES_FLRC.list
                         AirRate.values = SX128x_RATES_FLRC.values
                         AirRate.max_allowed = #SX128x_RATES_FLRC.values
