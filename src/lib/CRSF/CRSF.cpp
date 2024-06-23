@@ -8,7 +8,7 @@
 
 GenericLutCRC<uint8_t, CRSF_GEN_POLY, 8> DMA_ATTR crc_crsf;
 
-uint8_t DMA_ATTR SerialInBuffer[/*CRSF_EXT_FRAME_SIZE(CRSF_PAYLOAD_SIZE_MAX)*/256];
+uint8_t DMA_ATTR SerialInBuffer[2][CRSF_FRAME_SIZE_MAX + 16];
 
 //#define DBF_PIN_CRSF_PACKET 2
 #ifdef DBF_PIN_CRSF_PACKET
@@ -23,10 +23,9 @@ void CRSF::Begin()
 
     GoodPktsCount = 0;
     BadPktsCount = 0;
-    SerialInPacketStart = 0;
-    SerialInPacketLen = 0;
-    SerialInPacketPtr = 0;
     CRSFframeActive = false;
+    pingpong = false;
+    p_buff = SerialInBuffer[pingpong];
 
 #if !BACKPACK_LOGGER_BUILD
     _dev->flush_read();
@@ -42,18 +41,6 @@ uint8_t *CRSF::ParseInByte(uint8_t const inChar)
 {
     uint8_t *packet_ptr = NULL;
 
-    if (SerialInPacketPtr >= sizeof(SerialInBuffer))
-    {
-        // we reached the maximum allowable packet length,
-        // so start again because shit fucked up hey.
-        SerialInPacketPtr = 0;
-        CRSFframeActive = false;
-        BadPktsCount++;
-    }
-
-    // store byte
-    SerialInBuffer[SerialInPacketPtr++] = inChar;
-
     // CRSF Frame:
     // | address | payload_len | payload* | crc |
 
@@ -68,70 +55,76 @@ uint8_t *CRSF::ParseInByte(uint8_t const inChar)
             gpio_out_write(crsf_packet, 1);
 #endif
         }
-        else
+        return NULL;
+    }
+
+    if (SerialInPacketLen == 0) // we read the packet length and save it
+    {
+        SerialInCrc = 0;
+        SerialInPacketPtr = 0;
+        SerialInPacketLen = inChar;
+        if ((inChar < CRSF_FRAME_HEADER_BYTES) || (CRSF_PAYLOAD_SIZE_MAX < inChar))
         {
-            SerialInPacketPtr = 0;
+            // packet too long -> discard
+            CRSFframeActive = false;
+            BadPktsCount++;
         }
+        return NULL;
+    }
+
+    if (CRSF_PAYLOAD_SIZE_MAX <= SerialInPacketPtr)
+    {
+        // we reached the maximum allowable packet length,
+        // so start again because shit fucked up hey.
+        CRSFframeActive = false;
+        BadPktsCount++;
+        return NULL;
+    }
+
+    // store byte
+    p_buff[SerialInPacketPtr++] = inChar;
+
+    if (SerialInPacketPtr < SerialInPacketLen)
+    {
+        // Calc crc on the fly
+        SerialInCrc = crc_crsf.calc(inChar, SerialInCrc);
+        return NULL;
+    }
+
+    /* Check packet CRC */
+    if (SerialInCrc == inChar)
+    {
+        packet_ptr = p_buff;
+        GoodPktsCount++;
+        /* Swap the input buffer */
+        pingpong ^= true;
+        p_buff = SerialInBuffer[pingpong];
     }
     else
     {
-        if (SerialInPacketLen == 0) // we read the packet length and save it
-        {
-            SerialInCrc = 0;
-            SerialInPacketLen = inChar;
-            SerialInPacketStart = SerialInPacketPtr;
-            if ((SerialInPacketLen < 2) || (CRSF_FRAME_SIZE_MAX < SerialInPacketLen))
-            {
-                // failure -> discard
-                CRSFframeActive = false;
-                SerialInPacketPtr = 0;
-                BadPktsCount++;
-            }
-        }
-        else
-        {
-            uint32_t const current_len = SerialInPacketPtr - SerialInPacketStart;
-            if (SerialInPacketLen <= current_len)
-            {
-                /* Check packet CRC */
-                if (SerialInCrc == inChar)
-                {
-                    packet_ptr = &SerialInBuffer[SerialInPacketStart];
-                    GoodPktsCount++;
-                }
-                else
-                {
 #if 0
-                    // https://crccalc.com/
-                    // CRC algorithm: CRC-8/DVB-S2
-                    DEBUG_PRINTF("UART CRC %X != %X\n", SerialInCrc, inChar);
-                    for (int i = (SerialInPacketStart-2); i < (SerialInPacketLen + 2); i++)
-                    {
-                        DEBUG_PRINTF(" 0x%X", SerialInBuffer[i]);
-                    }
-                    DEBUG_PRINTF("\n");
+        // https://crccalc.com/
+        // CRC algorithm: CRC-8/DVB-S2
+        DEBUG_PRINTF("UART CRC %X != %X, len %u, data:\n", SerialInCrc, inChar, SerialInPacketLen);
+        for (int i = 0; i < SerialInPacketLen; i++)
+        {
+            DEBUG_PRINTF(" 0x%X", p_buff[i]);
+        }
+        DEBUG_PRINTF("\n");
 #elif defined(DEBUG_SERIAL)
-                    DEBUG_PRINTF("!C");
+        DEBUG_PRINTF("!C");
 #endif
-                    BadPktsCount++;
-                }
+        BadPktsCount++;
+    }
 
 #ifdef DBF_PIN_CRSF_PACKET
-                gpio_out_write(crsf_packet, 0);
+    gpio_out_write(crsf_packet, 0);
 #endif
 
-                // packet handled, start next
-                CRSFframeActive = false;
-                SerialInPacketPtr = 0;
-                SerialInPacketLen = 0;
-            }
-            else
-            {
-                // Calc crc on the fly
-                SerialInCrc = crc_crsf.calc(inChar, SerialInCrc);
-            }
-        }
-    }
+    // packet handled, start next
+    CRSFframeActive = false;
+    SerialInPacketPtr = 0;
+    SerialInPacketLen = 0;
 
     return packet_ptr;
 }

@@ -547,9 +547,10 @@ protected:
 private:
     bool CRSFframeActive;
     uint8_t SerialInCrc;
-    uint8_t SerialInPacketStart;
     uint8_t SerialInPacketLen;      // length of the CRSF packet as measured
     uint8_t SerialInPacketPtr;      // index where we are reading/writing
+    bool pingpong;
+    uint8_t * p_buff;
 };
 
 #endif
