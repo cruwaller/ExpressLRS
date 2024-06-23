@@ -12,6 +12,8 @@
 //#include <soc/rtc_cntl_reg.h>
 #include <esp_task_wdt.h>
 
+#include <soc/rtc_wdt.h>
+
 #include <soc/timer_group_struct.h>
 #include <soc/timer_group_reg.h>
 
@@ -58,13 +60,39 @@ void feedTheDog(void)
     TIMERG1.wdt_wprotect = 0;                   // write protect
 }
 
+static void configure_wdt(void)
+{
+#if 0
+    rtc_wdt_protect_off();
+    rtc_wdt_disable();
+#endif
+#if 1
+    // Set WDT timeout to 250ms
+    rtc_wdt_set_length_of_reset_signal(RTC_WDT_SYS_RESET_SIG, RTC_WDT_LENGTH_3_2us);
+    rtc_wdt_set_stage(RTC_WDT_STAGE0, RTC_WDT_STAGE_ACTION_RESET_SYSTEM);
+    rtc_wdt_set_time(RTC_WDT_STAGE0, 250);
+#endif
+
+    /* Disable watchdogs to precent unwanted resets */
+    //disableCore0WDT();
+    //disableCore1WDT();
+#if 0
+    TIMERG1.wdt_wprotect = TIMG_WDT_WKEY_VALUE; // Unlock timer config.
+    TIMERG1.wdt_feed = 1; // Reset feed count.
+    TIMERG1.wdt_config0.en = 0; // Disable timer.
+    TIMERG1.wdt_wprotect = 0; // Lock timer config.
+
+    TIMERG0.wdt_wprotect = TIMG_WDT_WKEY_VALUE;
+    TIMERG0.wdt_feed = 1;
+    TIMERG0.wdt_config0.en = 0;
+    TIMERG0.wdt_wprotect = 0;
+#endif
+    //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
+}
+
 void initVariant(void)
 {
-    /* Disable watchdogs to precent unwanted resets */
-    disableCore0WDT();
-    disableCore1WDT();
-
-    //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
+    //configure_wdt();
 }
 
 /******************* CONFIG *********************/
@@ -111,6 +139,8 @@ int8_t platform_config_save(struct platform_config &config)
 /******************* SETUP *********************/
 void platform_setup(void)
 {
+    configure_wdt();
+
     // Set higher task priority
     vTaskPrioritySet(NULL, 10);
 

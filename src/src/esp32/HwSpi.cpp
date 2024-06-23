@@ -8,6 +8,7 @@
 SPIClass DRAM_ATTR SpiBus;
 
 #if !USE_ARDUINO_SPI
+#include "soc/rtc_wdt.h"
 #include "soc/spi_reg.h"
 #include "soc/spi_struct.h"
 
@@ -74,7 +75,8 @@ __spiTransfer(struct spi_struct_t * const spi, const uint8_t * out, uint8_t * in
     if (!spi || !spi->dev) {
         return;
     }
-    SPI_MUTEX_LOCK();
+    //rtc_wdt_feed();
+    //SPI_MUTEX_LOCK();
     taskDISABLE_INTERRUPTS();
 #if 1
     while (size) {
@@ -102,7 +104,7 @@ __spiTransfer(struct spi_struct_t * const spi, const uint8_t * out, uint8_t * in
     }
 #endif
     taskENABLE_INTERRUPTS();
-    SPI_MUTEX_UNLOCK();
+    //SPI_MUTEX_UNLOCK();
 }
 #endif // !USE_ARDUINO_SPI
 
