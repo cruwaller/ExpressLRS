@@ -1,7 +1,10 @@
+# ----- WINDOWS -----
 java -jar EspStackTraceDecoder.jar c:\platformio\packages\toolchain-xtensa32\bin\xtensa-esp32-elf-addr2line.exe .pio\build\TX_TTGO_LORA_V1\firmware.elf dump.txt
 
 java -jar EspStackTraceDecoder.jar C:\platformio\packages\toolchain-xtensa@2.40802.200502\bin\xtensa-lx106-elf-addr2line.exe .pio\build\ESP8285__900_RX_Mini_v01\firmware.elf dump.txt
 
 
+# ----- LINUX -----
+java -jar EspStackTraceDecoder.jar ${HOME}/.platformio/packages/toolchain-xtensa-esp32/bin/xtensa-esp32-elf-addr2line .pio/build/DIY_TX_WROOM_Ebyte_E28/firmware.elf dump.txt
 
 java -jar EspStackTraceDecoder.jar ${HOME}/.platformio/packages/toolchain-xtensa/bin/xtensa-lx106-elf-addr2line .pio/build/LOGGER_for_TBS_Fusion_WEMOS_D1/backpack.elf dump.txt
