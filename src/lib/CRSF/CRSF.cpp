@@ -46,11 +46,15 @@ uint8_t *CRSF::ParseInByte(uint8_t const inChar)
 
     if (CRSFframeActive == false)
     {
-        if ((inChar == CRSF_ADDRESS_CRSF_RECEIVER) || (inChar == CRSF_ADDRESS_CRSF_TRANSMITTER) ||
-            (inChar == CRSF_SYNC_BYTE) || (inChar == CRSF_ADDRESS_BROADCAST))
+        if ((inChar == CRSF_SYNC_BYTE) || (inChar == CRSF_ADDRESS_CRSF_TRANSMITTER)
+#if defined(RX_MODULE)
+            // RX module should capture its onw packages just in case
+            || (inChar == CRSF_ADDRESS_CRSF_RECEIVER)
+#endif
+            /*|| (inChar == CRSF_ADDRESS_BROADCAST)*/)
         {
             CRSFframeActive = true;
-            SerialInPacketLen = 0;
+            SerialInPacketLen = -1;
 #ifdef DBF_PIN_CRSF_PACKET
             gpio_out_write(crsf_packet, 1);
 #endif
@@ -58,7 +62,7 @@ uint8_t *CRSF::ParseInByte(uint8_t const inChar)
         return NULL;
     }
 
-    if (SerialInPacketLen == 0) // we read the packet length and save it
+    if (SerialInPacketLen < 0) // we read the packet length and save it
     {
         SerialInCrc = 0;
         SerialInPacketPtr = 0;
@@ -123,8 +127,6 @@ uint8_t *CRSF::ParseInByte(uint8_t const inChar)
 
     // packet handled, start next
     CRSFframeActive = false;
-    SerialInPacketPtr = 0;
-    SerialInPacketLen = 0;
 
     return packet_ptr;
 }

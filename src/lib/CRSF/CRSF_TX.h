@@ -40,13 +40,7 @@ public:
     void sendMspPacketToRadio(mspPacket_t &msp) const;
 
     // OpenTX Syncing
-    void FAST_CODE_1 setRcPacketRate(uint32_t const interval)
-    {
-#if (FEATURE_OPENTX_SYNC)
-        // Scale value to correct format
-        RequestedRCpacketInterval = interval * 10;
-#endif
-    }
+    void setRcPacketRate(uint32_t const interval) const;
 
     void FAST_CODE_1 UpdateOpenTxSyncOffset(uint32_t const current_us)
     {
@@ -79,10 +73,9 @@ private:
 
     uint32_t RCdataLastRecv;
     int32_t OpenTXsyncOffset;
-    uint32_t RequestedRCpacketInterval;
     uint32_t OpenTXsynNextSend;
 #endif /* FEATURE_OPENTX_SYNC */
-    int sendSyncPacketToRadio();
+    void sendSyncPacketToRadio(void);
 
     // for the UART wdt, every 1000ms we change bauds when connect is lost
 #define UARTwdtInterval 1000

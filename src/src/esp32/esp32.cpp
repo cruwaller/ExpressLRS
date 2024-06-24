@@ -237,7 +237,6 @@ void platform_reboot_into_bootloader(const uint8_t * info)
 void platform_wifi_start(void)
 {
 #if WIFI_LOGGER || WIFI_UPDATER
-    //platform_radio_force_stop();
     wifi_start();
 #endif
 }

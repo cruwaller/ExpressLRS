@@ -11,6 +11,8 @@
 struct gpio_out crsf_byte_in;
 #endif
 
+#define OPENTX_SYNC_SCALE 10
+
 static void rcNullCb(uint8_t const *const) {}
 static void nullCallback(void){};
 
@@ -88,7 +90,7 @@ void CRSF_TX::Begin(void)
     p_msp_packet.header.orig_addr = CRSF_ADDRESS_FLIGHT_CONTROLLER;
 
     CRSF::Begin();
-    p_UartNextCheck = millis(); //  +UARTwdtInterval * 2;
+    p_UartNextCheck = millis();
 }
 
 void FAST_CODE_2 CRSF_TX::CrsfFramePushToFifo(uint8_t *buff, uint8_t size) const
@@ -193,29 +195,38 @@ void CRSF_TX::sendMspPacketToRadio(mspPacket_t &msp) const
     CrsfFramePushToFifo((uint8_t*)&p_msp_packet, sizeof(p_msp_packet));
 }
 
-int CRSF_TX::sendSyncPacketToRadio()
+void CRSF_TX::sendSyncPacketToRadio(void)
 {
 #if (FEATURE_OPENTX_SYNC)
-    if (RCdataLastRecv && p_RadioConnected)
+    if (!RCdataLastRecv || !p_RadioConnected)
     {
-        uint32_t const current = millis();
-        // Adjust radio timing if not in requested window or not sent within 200ms
-        if (OTX_SYNC_INTERVAL <= (current - OpenTXsynNextSend))
-        {
-            int32_t offset = (int32_t)(OpenTXsyncOffset - OTX_SYNC_ADVANCE);
-            OpenTXsynNextSend = current;
-
-            //DEBUG_PRINTF("Sync: int=%u,off=%d\n", RequestedRCpacketInterval, offset);
-
-            p_otx_sync_packet.packetRate =
-                __builtin_bswap32(RequestedRCpacketInterval);
-            p_otx_sync_packet.offset = __builtin_bswap32(offset * 10);
-            CrsfFramePushToFifo((uint8_t*)&p_otx_sync_packet, sizeof(p_otx_sync_packet));
-            return 0;
-        }
+        return;
     }
+
+    uint32_t const current = millis();
+    // Adjust radio timing if not in requested window or not sent within 200ms
+    if ((int32_t)(current - OpenTXsynNextSend) < OTX_SYNC_INTERVAL)
+    {
+        return;
+    }
+
+    int32_t const offset = (int32_t)(OpenTXsyncOffset - OTX_SYNC_ADVANCE);
+    p_otx_sync_packet.offset = __builtin_bswap32(offset * OPENTX_SYNC_SCALE);
+    CrsfFramePushToFifo((uint8_t*)&p_otx_sync_packet, sizeof(p_otx_sync_packet));
+
+    //DEBUG_PRINTF("Sync: int=%u,off=%d\n", p_otx_sync_packet.packetRate, offset);
+
+    OpenTXsynNextSend = current;
 #endif /* FEATURE_OPENTX_SYNC */
-    return -1;
+    return;
+}
+
+void CRSF_TX::setRcPacketRate(uint32_t const interval) const
+{
+#if (FEATURE_OPENTX_SYNC)
+    // Update packet rate and scale value to correct format
+    p_otx_sync_packet.packetRate = __builtin_bswap32(interval * OPENTX_SYNC_SCALE);
+#endif
 }
 
 void CRSF_TX::processPacket(uint8_t const *input)
@@ -314,35 +325,34 @@ uint8_t CRSF_TX::handleUartIn(void)
 void CRSF_TX::uart_wdt(void)
 {
     uint32_t now = millis();
-    if (UARTwdtInterval <= (now - p_UartNextCheck))
+    if ((int32_t)(now - p_UartNextCheck) < UARTwdtInterval)
     {
-        DEBUG_PRINTF("CRSF Bad:Good %u:%u\n", BadPktsCount, GoodPktsCount);
+        // No need to check result yet
+        return;
+    }
 
-        if (BadPktsCount >= GoodPktsCount)
+    DEBUG_PRINTF("CRSF Bad:Good %u:%u\n", BadPktsCount, GoodPktsCount);
+
+    if (BadPktsCount >= GoodPktsCount)
+    {
+        if (p_RadioConnected == true)
         {
-            if (p_RadioConnected == true)
-            {
-                DEBUG_PRINTF("CRSF UART Disconnect. ");
-                disconnected();
-                p_RadioConnected = false;
-#if (FEATURE_OPENTX_SYNC)
-                OpenTXsynNextSend = 0;
-                OpenTXsyncOffset = 0;
-#endif
-            }
-
-            _dev->end();
-            platform_wd_feed();
-
-            p_baudrateIdx = (p_baudrateIdx + 1) % ARRAY_SIZE(availableHandsetBauds);
-            _dev->Begin(availableHandsetBauds[p_baudrateIdx]);
-            DEBUG_PRINTF("Switched to baudrate %u\n", availableHandsetBauds[p_baudrateIdx]);
+            DEBUG_PRINTF("CRSF UART Disconnect. ");
+            disconnected();
+            p_RadioConnected = false;
         }
 
-        p_UartNextCheck = now;
-        BadPktsCount = 0;
-        GoodPktsCount = 0;
+        _dev->end();
+        platform_wd_feed();
+
+        p_baudrateIdx = (p_baudrateIdx + 1) % ARRAY_SIZE(availableHandsetBauds);
+        _dev->Begin(availableHandsetBauds[p_baudrateIdx]);
+        DEBUG_PRINTF("Switched to baudrate %u\n", availableHandsetBauds[p_baudrateIdx]);
     }
+
+    p_UartNextCheck = now;
+    BadPktsCount = 0;
+    GoodPktsCount = 0;
 }
 
 #endif // BACKPACK_LOGGER_BUILD
