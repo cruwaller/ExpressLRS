@@ -55,6 +55,7 @@ uint32_t uart_peripheral_get(uint32_t pin)
         case GPIO('B', 7):
         case GPIO('B', 6):
             return (uint32_t)USART1_BASE;
+        case GPIO('A', 15):
         case GPIO('A', 3):
         case GPIO('A', 2):
             return (uint32_t)USART2_BASE;
@@ -75,8 +76,10 @@ uint8_t uart_pin_is_tx(int32_t const pin)
 
 void uart_config_afio(uint32_t periph, uint32_t rx_pin, uint32_t tx_pin)
 {
-    if (rx_pin != tx_pin && rx_pin != (uint32_t)-1)
-        gpio_peripheral(rx_pin, GPIO_FUNCTION(7), 1);
+    if (rx_pin != tx_pin && rx_pin != (uint32_t)-1) {
+        uint32_t mode = (GPIO('A', 15) == rx_pin) ? 3 : 7;
+        gpio_peripheral(rx_pin, GPIO_FUNCTION(mode), 1);
+    }
     gpio_peripheral(tx_pin, GPIO_FUNCTION(7), 0);
 }
 
@@ -206,10 +209,6 @@ void ms_timer_init(void)
 
 void system_clock_config(void)
 {
-#if HSI_VALUE != 16000000
-#error "Wrong config! HSI VALUE is 16MHz!"
-#endif
-
     RCC_OscInitTypeDef RCC_OscInitStruct;
     RCC_ClkInitTypeDef RCC_ClkInitStruct;
     RCC_PeriphCLKInitTypeDef PeriphClkInit;
@@ -227,22 +226,66 @@ void system_clock_config(void)
      * f(PLL_Q) = f(VCO clock) / PLLQ (USB, RNG, SDMMC (48 MHz clock))
      * f(PLL_R) = f(VCO clock) / PLLR (system clock)
      */
-    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-    RCC_OscInitStruct.HSEState = RCC_HSE_OFF;
-    RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-    RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-    RCC_OscInitStruct.PLL.PLLM = 1;
-    RCC_OscInitStruct.PLL.PLLN = 10; // 16MHz * ( 10 / 1 ) = 160MHz
-    RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2; // 160MHz / 2 = 80MHz
-    RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7; // 160MHz / 7
+
+    /* PLL f out = ((f_in) * (PLLN / PLLM)) / PLLP */
+
+    /* Initializes the CPU, AHB and APB busses clocks to be 216MHz */
+#if !USE_INTERNAL_XO && defined(HSE_VALUE)
+#if HSE_VALUE < 1000000U
+#error "Wrong config! HSE VALUE min is 1MHz!"
+#elif HSE_VALUE > 63000000U
+#error "Wrong config! HSE VALUE max is 63MHz!"
+#endif
+
+#define PLL_M 1
+#define PLL_NM ((HSE_VALUE / 1000000U) * PLL_M)
+
+#ifndef HSE_ST_LINK_MCO
+#define HSE_ST_LINK_MCO 0
+#endif
+
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE | RCC_OSCILLATORTYPE_HSI;
+    RCC_OscInitStruct.HSEState       = (HSE_ST_LINK_MCO) ? RCC_HSE_BYPASS : RCC_HSE_ON;
+    RCC_OscInitStruct.HSIState       = RCC_HSI_OFF;
+    RCC_OscInitStruct.PLL.PLLState   = RCC_PLL_ON;
+    RCC_OscInitStruct.PLL.PLLSource  = RCC_PLLSOURCE_HSE;
+    RCC_OscInitStruct.PLL.PLLM       = PLL_M;
+    RCC_OscInitStruct.PLL.PLLN       = 160 / PLL_NM;   // CLK_f * ( PLLN / PLLM ) = 160MHz
+    RCC_OscInitStruct.PLL.PLLR       = RCC_PLLR_DIV2;  // 160MHz / 2 = 80MHz
+    RCC_OscInitStruct.PLL.PLLP       = RCC_PLLP_DIV7;  // 160MHz / 7
 #if defined(STM32L432xx)
-    RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV4; // 160MHz / 4
+    RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV4;  // 160MHz / 4
+#else                                            // !STM32L432xx
+    /* STM32L433 */
+    RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;  // 160MHz / 2
+#endif                                           // STM32L432xx
+
+#else  // USE_INTERNAL_XO
+#if HSI_VALUE != 16000000U
+#error "Wrong config! HSI VALUE is 16MHz!"
+#endif
+
+#define PLL_M (HSI_VALUE / 1000000U)
+
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+    RCC_OscInitStruct.HSEState       = RCC_HSE_OFF;
+    RCC_OscInitStruct.HSIState       = RCC_HSI_ON;
+    RCC_OscInitStruct.PLL.PLLState   = RCC_PLL_ON;
+    RCC_OscInitStruct.PLL.PLLSource  = RCC_PLLSOURCE_HSI;
+    RCC_OscInitStruct.PLL.PLLM       = 1;
+    RCC_OscInitStruct.PLL.PLLN       = 10;             // 16MHz * ( 10 / 1 ) = 160MHz
+    RCC_OscInitStruct.PLL.PLLR       = RCC_PLLR_DIV2;  // 160MHz / 2 = 80MHz
+    RCC_OscInitStruct.PLL.PLLP       = RCC_PLLP_DIV7;  // 160MHz / 7
+#if defined(STM32L432xx)
+    RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV4;  // 160MHz / 4
 #else // !STM32L432xx
     /* STM32L433 */
-    RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2; // 160MHz / 2
+    RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;  // 160MHz / 2
 #endif // STM32L432xx
+#endif // !USE_INTERNAL_XO
+
     RCC_OscInitStruct.HSICalibrationValue = 0x10;
+
     if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
         Error_Handler();
     }
