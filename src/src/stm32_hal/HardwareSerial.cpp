@@ -207,8 +207,14 @@ void FAST_CODE_2 USART_IDLE_IRQ_handler(uint32_t index)
             uint8_t head_pos = sizeof(serial->rx_buffer) -
                 LL_DMA_GetDataLength((DMA_TypeDef *)serial->dma_unit_rx, serial->dma_ch_rx);
             serial->rx_head = head_pos;
-            //LL_USART_ClearFlag_IDLE((USART_TypeDef *)uart);
+#if defined(USART_ICR_IDLECF)
             uart->ICR = USART_ICR_IDLECF;
+#elif defined(STM32F1xx)
+            // SR already read, just read DR to clear IRQ flags
+            (void)uart->RxDataReg;
+#else
+            LL_USART_ClearFlag_IDLE((USART_TypeDef *)uart);
+#endif
         }
         /* Check for RX data */
         else if ((SR & (USART_SR_RXNE | USART_SR_ORE)) && (CR1 & USART_CR1_RXNEIE)) {
@@ -646,7 +652,7 @@ uint32_t HardwareSerial::write_direct(const uint8_t *buff, uint32_t len)
     hw_enable_transmitter();
     uart_tx->CR1 &= ~USART_CR1_TXEIE;  // Disable TX ISR
     while (len--) {
-        while(!(uart_tx->StatReg & USART_ISR_TXE));
+        while(!(uart_tx->StatReg & USART_SR_TXE));
         uart_tx->TxDataReg = *buff++;
     }
     hw_enable_receiver();
