@@ -1,6 +1,6 @@
 #include "Arduino.h"
 #include "stm32_def.h"
-
+#include "priorities.h"
 
 #ifdef DWT_BASE
 static void dwt_access(bool ena)
@@ -71,6 +71,12 @@ static void init(void)
     if (dwt_init()) {
         Error_Handler();
     }
+#endif
+
+#if 0x01060000 <= __STM32L4_CMSIS_VERSION
+    /* HAL_InitTick -> priority check fail */
+    extern uint32_t uwTickPrio;
+    uwTickPrio = ISR_PRIO_TICKS;
 #endif
 
     /* Configure the system clock */
