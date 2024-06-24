@@ -73,4 +73,6 @@ jobs:
         name: temp-${{ matrix.target }}
         path: ~/artifacts/**/*
         retention-days: 7
+        if-no-files-found: ignore # ignore warnings
+        compression-level: 9 # maximum compression
       continue-on-error: true
