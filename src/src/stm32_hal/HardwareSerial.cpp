@@ -73,7 +73,7 @@
 #define USART_SR_TC     USART_ISR_TC
 #endif
 
-#define UART_ENABLE_DMA_RX 0 // Don't enable yet
+#define UART_ENABLE_DMA_RX 1
 #define UART_ENABLE_DMA_TX 1
 
 
@@ -154,59 +154,38 @@ dma_ifcr_mask_get(uint32_t mask, uint8_t dma_ch)
     return mask;
 }
 
-int8_t FAST_CODE_2 DMA_transmit(HardwareSerial * serial, uint8_t dma_ch)
+bool FAST_CODE_2 DMA_transmit(HardwareSerial * serial, uint8_t dma_ch)
 {
     DMA_TypeDef * dma = (DMA_TypeDef *)serial->dma_unit_tx;
-    //irqstatus_t irqs = irq_save();
-
-    /* Check if TX ongoing... */
-    /*if (!LL_DMA_IsEnabledChannel(dma, dma_ch))*/ {
-        /* Check if something to send */
-        uint32_t len = 0, data = (uint32_t)serial->tx_pool_get(&len);
-        if (data && len) {
-            //LL_DMA_DisableChannel(dma, dma_ch);
-            /* Clear all irq flags */
-            __IO uint32_t * IFCR;
-            uint32_t mask;
+    /* Check if something to send */
+    uint32_t len, data;
+    if (!serial->tx_pool_get((uint8_t**)&data, &len))
+        return false;
+    /* Clear all irq flags */
+    __IO uint32_t * IFCR;
+    uint32_t mask;
 #ifdef STM32F7xx
-            mask = ((0x1 << DMA_LIFCR_CFEIF1_Pos) - 1);
-            if (dma_ch < 4)
-                IFCR = &dma->LIFCR;
-            else
-                IFCR = &dma->HIFCR;
+    mask = ((0x1 << DMA_LIFCR_CFEIF1_Pos) - 1);
+    IFCR = (dma_ch < 4) ? &dma->LIFCR : &dma->HIFCR;
 #else
-            mask = 0xF;
-            IFCR = &dma->IFCR;
+    mask = 0xF;
+    IFCR = &dma->IFCR;
 #endif
-            WRITE_REG(*IFCR, dma_ifcr_mask_get(mask, dma_ch));
-            /* Set source address */
-            LL_DMA_SetMemoryAddress(dma, dma_ch, data);
-            LL_DMA_SetDataLength(dma, dma_ch, len);
-            /* enable tx */
-            serial->hw_enable_transmitter();
-            /* Start transfer */
-            LL_DMA_EnableChannel(dma, dma_ch);
-            return 0;
-        }
-    }
-
-    //irq_restore(irqs);
-    return -1;
+    WRITE_REG(*IFCR, dma_ifcr_mask_get(mask, dma_ch));
+    /* Set source address */
+    LL_DMA_SetMemoryAddress(dma, dma_ch, data);
+    LL_DMA_SetDataLength(dma, dma_ch, len);
+    /* enable tx */
+    serial->hw_enable_transmitter();
+    /* Start transfer */
+    LL_DMA_EnableChannel(dma, dma_ch);
+    return true;
 }
 
 #if UART_USE_TX_POOL_ONLY
-int8_t FAST_CODE_2 UART_transmit(HardwareSerial * serial)
+bool FAST_CODE_2 UART_transmit(HardwareSerial * serial)
 {
-    //irqstatus_t irqs = irq_save();
-    uint32_t len = 0;
-    uint8_t* data = serial->tx_pool_get(&len);
-    if (data && len) {
-        serial->tx_buffer_ptr = data;
-        serial->tx_buffer_len = len;
-        return 0;
-    }
-    //irq_restore(irqs);
-    return -1;
+    return serial->tx_pool_get(&serial->tx_buffer_ptr, &serial->tx_buffer_len);
 }
 #endif
 
@@ -225,16 +204,11 @@ void FAST_CODE_2 USART_IDLE_IRQ_handler(uint32_t index)
 
         /* Check for IDLE line interrupt */
         if ((SR & USART_SR_IDLE) && (CR1 & USART_CR1_IDLEIE)) {
-            (void)uart->RxDataReg;
             uint8_t head_pos = sizeof(serial->rx_buffer) -
                 LL_DMA_GetDataLength((DMA_TypeDef *)serial->dma_unit_rx, serial->dma_ch_rx);
-            /*
-            uint8_t head = serial->rx_head;
-            uint8_t tail = head + (uint8_t)(head_pos - head);
-            if (tail >= serial->rx_tail)
-                serial->rx_tail = tail;
-            */
             serial->rx_head = head_pos;
+            //LL_USART_ClearFlag_IDLE((USART_TypeDef *)uart);
+            uart->ICR = USART_ICR_IDLECF;
         }
         /* Check for RX data */
         else if ((SR & (USART_SR_RXNE | USART_SR_ORE)) && (CR1 & USART_CR1_RXNEIE)) {
@@ -256,7 +230,7 @@ void FAST_CODE_2 USART_IDLE_IRQ_handler(uint32_t index)
             if (serial->tx_buffer_len) {
                 uart->TxDataReg = *serial->tx_buffer_ptr++;
                 serial->tx_buffer_len--;
-            } else if (UART_transmit(serial) < 0) {
+            } else if (!UART_transmit(serial)) {
                 serial->hw_enable_receiver();
             }
 #else
@@ -289,7 +263,8 @@ void FAST_CODE_2 USARTx_DMA_handler(uint32_t index)
     mask = dma_ifcr_mask_get(mask, channel);
     if (sr & mask) {
         LL_DMA_DisableChannel(dma, channel);
-        if (DMA_transmit(serial, channel) < 0) {
+        if (!DMA_transmit(serial, channel)) {
+            // Nothing to send
             serial->hw_enable_receiver();
         }
 #ifdef STM32F7xx
@@ -413,13 +388,7 @@ void HardwareSerial::begin(unsigned long baud, uint8_t mode)
     tx_head = tx_tail = 0;
 #endif
 
-    /* Init TX list */
-    tx_pool_tail = tx_pool_head = tx_pool;
-    uint8_t iter;
-    for (iter = 0; iter < (sizeof(tx_pool)/sizeof(tx_pool[0]) - 1); iter++) {
-        tx_pool[iter].next = &tx_pool[iter+1];
-    }
-    tx_pool[iter].next = &tx_pool[0];
+    tx_pool_init();
 
     if ((p_use_dma & USE_DMA_RX) && p_usart_rx) {
         uart = (USART_TypeDef*)p_usart_rx;
@@ -455,10 +424,11 @@ void HardwareSerial::begin(unsigned long baud, uint8_t mode)
                 NVIC_SetPriority((IRQn_Type)dma_irq_rx,
                     NVIC_EncodePriority(NVIC_GetPriorityGrouping(), ISR_PRIO_UART_DMA, 0));
                 NVIC_EnableIRQ((IRQn_Type)dma_irq_rx);
-                /* Enable DMA */
-                LL_DMA_EnableChannel(dmaptr, dma_ch_rx);
 
                 dma_request_config((uint32_t)uart, DMA_USART_RX, 0);
+
+                /* Enable DMA */
+                LL_DMA_EnableChannel(dmaptr, dma_ch_rx);
             }
         }
     }
@@ -597,9 +567,10 @@ void HardwareSerial::end(void)
 int HardwareSerial::available(void)
 {
     //irqstatus_t flag = irq_save();
-    uint8_t head = read_u8(&rx_head), tail = read_u8(&rx_tail);
+    //uint8_t head = read_u8(&rx_head), tail = read_u8(&rx_tail);
+    uint8_t head = rx_head, tail = rx_tail;
     //irq_restore(flag);
-    return (uint8_t)(head - tail);
+    return (int)(head - tail);
 }
 
 int HardwareSerial::read(void)
@@ -623,11 +594,11 @@ void HardwareSerial::flush(void)
 uint32_t HardwareSerial::write(const uint8_t *buff, uint32_t len)
 {
 #if UART_USE_TX_POOL_ONLY
-    tx_pool_add(buff, len);
+    tx_pool_push(buff, len);
 #endif
     if (dma_unit_tx) {
 #if !UART_USE_TX_POOL_ONLY
-        tx_pool_add(buff, len);
+        tx_pool_push(buff, len);
 #endif
         if (!LL_DMA_IsEnabledChannel((DMA_TypeDef *)dma_unit_tx, dma_ch_tx))
             DMA_transmit(this, dma_ch_tx);
@@ -667,6 +638,19 @@ uint32_t HardwareSerial::write(const uint8_t *buff, uint32_t len)
 #endif
     }
     return len;
+}
+
+uint32_t HardwareSerial::write_direct(const uint8_t *buff, uint32_t len)
+{
+    USART_TypeDef * const uart_tx = (USART_TypeDef *)p_usart_tx;
+    hw_enable_transmitter();
+    uart_tx->CR1 &= ~USART_CR1_TXEIE;  // Disable TX ISR
+    while (len--) {
+        while(!(uart_tx->StatReg & USART_ISR_TXE));
+        uart_tx->TxDataReg = *buff++;
+    }
+    hw_enable_receiver();
+    return 0;
 }
 
 void FAST_CODE_2 HardwareSerial::hw_enable_receiver(void)

@@ -6,6 +6,7 @@
 #include "irq.h"
 #include "platform.h"
 
+
 #define SERIAL_8N1 0x06
 
 #define UART_BUFF_SIZE 256
@@ -21,13 +22,13 @@
 #endif
 
 /* This is to avoid unnecessary data copy */
-#define UART_USE_TX_POOL_ONLY 0
+#define UART_USE_TX_POOL_ONLY 1
 
 // Used by the TX DMA
 // Note: make sure the TX is not called ofter for same buffer!
 struct tx_pool_s {
     struct tx_pool_s * next;
-    uint8_t * data_ptr;
+    uint8_t const * data_ptr;
     uint32_t len;
 };
 
@@ -47,6 +48,7 @@ public:
     int read(void);
     void flush(void);
     uint32_t write(const uint8_t *buff, uint32_t len);
+    uint32_t write_direct(const uint8_t *buff, uint32_t len);
     void setTimeout(unsigned long) {}
 
     void hw_enable_receiver(void);
@@ -66,19 +68,17 @@ public:
 #endif
 
     // for DMA TX
-    uint8_t* tx_pool_get(uint32_t * len)
+    bool tx_pool_get(uint8_t** const p_data, uint32_t * const p_len)
     {
-        uint8_t * ret = NULL;
         irqstatus_t flag = irq_save();
-        struct tx_pool_s * tail = tx_pool_tail_get();
-        if (tx_pool_head_get() != tail) {
-            ret = tail->data_ptr;
-            *len = tail->len;
-            tail->data_ptr = NULL;
-            tx_pool_tail_set(tail->next);
-        }
+        struct tx_pool_s * tail = tx_pool_pop();
         irq_restore(flag);
-        return ret;
+        if (!tail)
+            return false;
+        *p_data = (uint8_t*)tail->data_ptr;
+        *p_len = tail->len;
+        tail->data_ptr = NULL;
+        return true;
     }
 
     void* dma_unit_tx;
@@ -107,39 +107,47 @@ private:
 
     // for DMA TX
     struct tx_pool_s tx_pool[UART_DMA_TX_BUFF];
-    struct tx_pool_s * tx_pool_head;
-    struct tx_pool_s * tx_pool_tail;
+    size_t tx_pool_in;
+    size_t tx_pool_out;
 
     uint32_t DR_RX;
     uint32_t DR_TX;
 
-    struct tx_pool_s * tx_pool_head_get(void) {
-        //return (struct tx_pool_s *)read_u32(&tx_pool_head);
-        return tx_pool_head;
-    }
-    void tx_pool_head_set(struct tx_pool_s * head) {
-        //write_u32(&tx_pool_head, (uint32_t)head);
-        tx_pool_head = head;
-    }
-    struct tx_pool_s * tx_pool_tail_get(void) {
-        //return (struct tx_pool_s *)read_u32(&tx_pool_tail);
-        return tx_pool_tail;
-    }
-    void tx_pool_tail_set(struct tx_pool_s * tail) {
-        //write_u32(&tx_pool_tail, (uint32_t)tail);
-        tx_pool_tail = tail;
+    void tx_pool_init(void) {
+        tx_pool_out = tx_pool_in = 0;
     }
 
-    void tx_pool_add(const uint8_t * data, uint32_t len)
-    {
+    bool tx_pool_is_empty(void) {
         irqstatus_t flag = irq_save();
-        struct tx_pool_s * next = tx_pool_head_get();
-        if (!next->data_ptr) {
-            next->data_ptr = (uint8_t*)data;
-            next->len = len;
-            tx_pool_head_set(next->next);
-        }
+        bool empty = tx_pool_out == tx_pool_in;
         irq_restore(flag);
+        return empty;
+    }
+
+    bool tx_pool_is_full(void) {
+        irqstatus_t flag = irq_save();
+        bool full = tx_pool_in == ((tx_pool_out - 1 + UART_DMA_TX_BUFF) % UART_DMA_TX_BUFF);
+        irq_restore(flag);
+        return full;
+    }
+
+    struct tx_pool_s * tx_pool_pop(void) {
+        if (tx_pool_is_empty())
+            return NULL;
+        size_t out = tx_pool_out;
+        struct tx_pool_s * p_out = &tx_pool[out];
+        tx_pool_out = (out + 1) % UART_DMA_TX_BUFF;
+        return p_out;
+    }
+
+    void tx_pool_push(const uint8_t * data, uint32_t len)
+    {
+        if (tx_pool_is_full())
+            return;
+        size_t in = tx_pool_in;
+        tx_pool[in].data_ptr = data;
+        tx_pool[in].len = len;
+        tx_pool_in = (in + 1) % UART_DMA_TX_BUFF;
     }
 };
 
