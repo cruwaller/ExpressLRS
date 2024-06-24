@@ -70,6 +70,7 @@ jobs:
     - name: Store Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: firmware
+        name: temp-${{ matrix.target }}
         path: ~/artifacts/**/*
+        retention-days: 7
       continue-on-error: true
