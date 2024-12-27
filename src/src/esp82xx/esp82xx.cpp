@@ -6,6 +6,9 @@
 
 #include <Arduino.h>
 
+#if TARGET_ESP8285_TX
+#include <EEPROM.h>
+#endif
 
 #define WEB_UPDATE_LED_FLASH_INTERVAL 50
 
@@ -45,7 +48,9 @@ void beginWebsever(int state)
     if (state != STATE_disconnected)
         return;
 
+#if !TARGET_ESP8285_TX
     forced_stop();
+#endif
 
     BeginWebUpdate();
     write_u32(&connectionState, (uint32_t)STATE_fw_upgrade);
@@ -71,6 +76,45 @@ void button_handle(int state)
 
 #endif // GPIO_PIN_BUTTON
 
+/******************* CONFIG *********************/
+#if TARGET_ESP8285_TX
+int8_t platform_config_load(struct platform_config &config)
+{
+#if STORE_TO_FLASH
+    struct platform_config temp;
+
+    EEPROM.get(0, temp);
+
+    if (temp.key == ELRS_EEPROM_KEY) {
+        /* load ok, copy values */
+        memcpy(&config, &temp, sizeof(temp));
+        return 0;
+    } else if ((temp.key & ELRS_EEPROM_KEY_MASK) == ELRS_EEPROM_KEY_BASE) {
+        platform_config_migrate(&temp, config);
+    }
+    return -1;
+#else
+    config.key = ELRS_EEPROM_KEY;
+    return 0;
+#endif
+}
+
+int8_t platform_config_save(struct platform_config &config)
+{
+    int8_t retval;
+    if (config.key != ELRS_EEPROM_KEY)
+        return -1;
+#if STORE_TO_FLASH
+    EEPROM.put(0, config);
+    retval = EEPROM.commit() ? 0 : -1;
+    return retval;
+#else
+    return 0;
+#endif
+}
+#endif
+
+/******************* SETUP *********************/
 void platform_setup(void)
 {
     /* Force WIFI off until it is realy needed */
@@ -114,6 +158,18 @@ void platform_loop(int state)
     }
 }
 
+#if TARGET_ESP8285_TX
+void platform_mode_notify(uint8_t mode)
+{
+    (void)mode;
+}
+
+void platform_wifi_start(void)
+{
+    beginWebsever(STATE_disconnected);
+}
+#endif
+
 static uint8_t loop_cnt;
 void platform_connection_state(int state)
 {
@@ -153,8 +209,10 @@ void platform_reboot_into_bootloader(const uint8_t * info)
 {
     if (validate_bl_indentifier(info) < 0)
         return;
+#if !TARGET_ESP8285_TX
     forced_stop();
     delay(100);
+#endif
     ESP.rebootIntoUartDownloadMode();
 }
 

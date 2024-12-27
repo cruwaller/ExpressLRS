@@ -15,10 +15,9 @@
 #endif
 #include <stdlib.h>
 
-
 //// CONSTANTS ////
-#define RX_CONNECTION_LOST_TIMEOUT  1500U // After 1500ms of no TLM response consider that slave has lost connection
-#define TX_POWER_UPDATE_PERIOD      1500U
+#define RX_CONNECTION_LOST_TIMEOUT 1500U // After 1500ms of no TLM response consider that slave has lost connection
+#define TX_POWER_UPDATE_PERIOD     1500U
 
 ///////////////////
 /// define some libs to use ///
@@ -64,12 +63,11 @@ GpsOta_t DRAM_ATTR GpsTlm;
 DeviceInfo_t DRAM_ATTR DevInfo;
 uint32_t tlm_updated;
 
-
 static uint8_t SetRadioType(uint8_t type);
 static void SendRCdataToRF(uint32_t const current_us);
-static uint8_t SetRFLinkRate(uint8_t rate, uint8_t init=0);
+static uint8_t SetRFLinkRate(uint8_t rate, uint8_t init = 0);
 
-//static struct gpio_out debug_pin_tx;
+// static struct gpio_out debug_pin_tx;
 
 ///////////////////////////////////////
 
@@ -81,7 +79,11 @@ void tx_common_init_globals(void)
     for (uint8_t iter = 0; iter < ARRAY_SIZE(pl_config.rf); iter++) {
         pl_config.rf[iter].mode = RATE_DEFAULT;
         pl_config.rf[iter].power = TX_POWER_DEFAULT;
+#if SERIAL_PASSTHROUGH && SERIAL_BIDIR
+        pl_config.rf[iter].tlm = TLM_RATIO_1_2;
+#else
         pl_config.rf[iter].tlm = get_elrs_default_tlm_interval(iter, RATE_DEFAULT);
+#endif
     }
 
     // Default to 127x if both defined
@@ -98,7 +100,7 @@ void tx_common_init_globals(void)
 
     tlm_updated = TLM_UPDATES_NA;
 
-    //debug_pin_tx = gpio_out_setup(PC12, 0);
+    // debug_pin_tx = gpio_out_setup(PC12, 0);
 }
 
 void tx_common_init(void)
@@ -121,19 +123,18 @@ void tx_common_init(void)
     if (!SetRadioType(pl_config.rf_mode)) {
 #if RADIO_SX127x && RADIO_SX128x
         /* Roll back to other module if first failed */
-        pl_config.rf_mode =
-            (pl_config.rf_mode == RADIO_TYPE_127x) ? RADIO_TYPE_128x : RADIO_TYPE_127x;
+        pl_config.rf_mode = (pl_config.rf_mode == RADIO_TYPE_127x) ? RADIO_TYPE_128x : RADIO_TYPE_127x;
         if (!SetRadioType(pl_config.rf_mode))
 #endif
             /* Infinite loop in case of failure */
-            while(1) {
+            while (1) {
                 /* TODO: blink led... */
                 DEBUG_PRINTF("RADIO CONFIG ERROR!\n");
                 delay(1000);
             }
     }
     SetRFLinkRate(current_rate_config, 1);
-    //delay(10);
+    // delay(10);
 
 #ifdef CTRL_SERIAL
     uint8_t resp[2] = {0, 0};
@@ -143,49 +144,46 @@ void tx_common_init(void)
 
 ///////////////////////////////////////
 
-static void PacketReceivedCallback(uint8_t *buff, uint32_t rx_us, size_t payloadSize, int32_t freq_err);
+static void PacketReceivedCallback(uint8_t * buff, uint32_t rx_us, size_t payloadSize, int32_t freq_err);
 static void TransmissionCompletedCallback();
 
-uint8_t tx_tlm_value_validate(uint8_t value)
+uint8_t tx_tlm_value_validate(uint8_t const value)
 {
+    if (TLM_RATIO_MAX <= value) {
+        return TLM_RATIO_NO_TLM;
+    }
     if (value == TLM_RATIO_DEFAULT) {
         // reset to default value
-        value = ExpressLRS_currAirRate->TLMinterval;
-    } else if (TLM_RATIO_MAX <= value) {
-        value = TLM_RATIO_NO_TLM;
+        return ExpressLRS_currAirRate->TLMinterval;
     }
     return value;
 }
 
-uint8_t tx_tlm_change_interval(uint8_t const value, uint8_t const init = 0)
+void tx_tlm_change_interval(uint8_t const value, uint8_t const init = 0)
 {
     uint32_t ratio = 0;
-    if (value != TLMinterval || init) {
-        if (TLM_RATIO_NO_TLM < value) {
-            Radio->RXdoneCallback1 = PacketReceivedCallback;
-            Radio->TXdoneCallback1 = TransmissionCompletedCallback;
-            connectionState = STATE_disconnected;
-            ratio = TlmEnumToMask(value);
-        } else {
-            Radio->RXdoneCallback1 = Radio->rx_nullCallback;
-            Radio->TXdoneCallback1 = Radio->tx_nullCallback;
-            // Set connected if telemetry is not used
-            connectionState = STATE_connected;
-        }
-        //write_u32(&TLMinterval, value);
-        //write_u32(&tlm_check_ratio, ratio);
-        TLMinterval = value;
-        tlm_check_ratio = ratio;
-        return 1;
+    if (value == TLMinterval && !init) {
+        return;
     }
-    return 0;
+    if (TLM_RATIO_NO_TLM < value) {
+        Radio->RXdoneCallback1 = PacketReceivedCallback;
+        Radio->TXdoneCallback1 = TransmissionCompletedCallback;
+        connectionState = STATE_disconnected;
+        ratio = TlmEnumToMask(value);
+    } else {
+        Radio->RXdoneCallback1 = Radio->rx_nullCallback;
+        Radio->TXdoneCallback1 = Radio->tx_nullCallback;
+        // Set connected if telemetry is not used
+        connectionState = STATE_connected;
+    }
+    TLMinterval = value;
+    tlm_check_ratio = ratio;
 }
 
 int8_t tx_tlm_toggle(void)
 {
     /* Toggle TLM between NO_TLM and DEFAULT */
-    uint8_t const tlm = (TLMinterval == TLM_RATIO_NO_TLM) ?
-        pl_config.rf[pl_config.rf_mode].tlm : TLM_RATIO_NO_TLM;
+    uint8_t const tlm = (TLMinterval == TLM_RATIO_NO_TLM) ? pl_config.rf[pl_config.rf_mode].tlm : TLM_RATIO_NO_TLM;
     tx_tlm_change_interval(tlm);
     return (TLMinterval != TLM_RATIO_NO_TLM);
 }
@@ -193,8 +191,7 @@ int8_t tx_tlm_toggle(void)
 #if defined(TX_TLM_WHEN_DISARMED)
 void FAST_CODE_1 tx_common_armed_state(uint8_t const armed)
 {
-    uint8_t next_tlm_value =
-        (armed) ? pl_config.rf[pl_config.rf_mode].tlm : TLM_RATIO_1_4;
+    uint8_t next_tlm_value = (armed) ? pl_config.rf[pl_config.rf_mode].tlm : TLM_RATIO_1_4;
     tx_tlm_change_interval(next_tlm_value);
 }
 #endif
@@ -231,7 +228,7 @@ static uint8_t SetRadioType(uint8_t const type)
         /* Stop radio processing if chaning RF type */
         if (Radio)
             platform_radio_force_stop();
-        RadioInterface *new_radio = common_config_radio(type);
+        RadioInterface * new_radio = common_config_radio(type);
         if (!new_radio) {
             return 0;
         }
@@ -250,16 +247,15 @@ static uint8_t SetRadioType(uint8_t const type)
             Radio->SetSyncWordLong(my_uid_crc32());
         }
 
-        PowerLevels_e const power =
-            (PowerLevels_e)(pl_config.rf[type].power % PWR_UNKNOWN);
+        PowerLevels_e const power = (PowerLevels_e)(pl_config.rf[type].power % PWR_UNKNOWN);
         platform_mode_notify(get_elrs_airRateMax() - current_rate_config);
 
-        DEBUG_PRINTF("SetRadioType type:%u, rate:%u, tlm:%u, pwr:%u, cipher:0x%X\n",
-            type, current_rate_config, pl_config.rf[type].tlm, power, CRCCaesarCipher);
+        DEBUG_PRINTF("SetRadioType type:%u, rate:%u, tlm:%u, pwr:%u, cipher:0x%X\n", type, current_rate_config,
+                     pl_config.rf[type].tlm, power, CRCCaesarCipher);
 
 #if DAC_IN_USE
         PowerMgmt.Begin(Radio, &r9dac);
-#else /* !DAC_IN_USE */
+#else  /* !DAC_IN_USE */
         PowerMgmt.Begin(Radio);
 #endif /* DAC_IN_USE */
         PowerMgmt.setPower(power);
@@ -279,7 +275,7 @@ void process_rx_buffer(uint8_t payloadSize)
     if (ExpressLRS_currAirRate->hwCrc != HWCRC_EN) {
         payloadSize -= OTA_PACKET_CRC;
 
-        const uint16_t crc = CalcCRC16((uint8_t*)rx_buffer, payloadSize, CRCCaesarCipher);
+        const uint16_t crc = CalcCRC16((uint8_t *)rx_buffer, payloadSize, CRCCaesarCipher);
         const uint16_t crc_in = ((uint16_t)rx_buffer[payloadSize] << 8) + rx_buffer[payloadSize + 1];
 
         if (crc_in != crc) {
@@ -288,7 +284,7 @@ void process_rx_buffer(uint8_t payloadSize)
         }
     }
 
-    //DEBUG_PRINTF(" PROC_RX ");
+    // DEBUG_PRINTF(" PROC_RX ");
 
     connectionState = STATE_connected;
     platform_connection_state(STATE_connected);
@@ -296,15 +292,15 @@ void process_rx_buffer(uint8_t payloadSize)
     LastPacketRecvMillis = ms;
     recv_tlm_counter++;
 
-    switch (RcChannels_packetTypeGet((uint8_t*)rx_buffer, payloadSize)) {
+#if !SERIAL_PASSTHROUGH
+    switch (RcChannels_packetTypeGet((uint8_t *)rx_buffer, payloadSize)) {
         case DL_PACKET_TLM_MSP: {
-            if (RcChannels_tlm_ota_receive((uint8_t*)rx_buffer, msp_packet_rx))
+            if (RcChannels_tlm_ota_receive((uint8_t *)rx_buffer, msp_packet_rx))
                 tlm_msp_rcvd = 1;
             break;
         }
         case DL_PACKET_TLM_LINK: {
-            RcChannels_link_stas_extract((uint8_t*)rx_buffer, LinkStatistics,
-                                         (int8_t)read_u8(&Radio->LastPacketSNR),
+            RcChannels_link_stas_extract((uint8_t *)rx_buffer, LinkStatistics, (int8_t)read_u8(&Radio->LastPacketSNR),
                                          (int16_t)read_u16(&Radio->LastPacketRSSI));
             tlm_updated |= (TLM_UPDATES_LNK_STATS | TLM_UPDATES_BATTERY);
 
@@ -321,21 +317,27 @@ void process_rx_buffer(uint8_t payloadSize)
             break;
         }
         case DL_PACKET_GPS: {
-            RcChannels_gps_extract((uint8_t*)rx_buffer, GpsTlm);
+            RcChannels_gps_extract((uint8_t *)rx_buffer, GpsTlm);
             tlm_updated |= TLM_UPDATES_GPS;
             break;
         }
         case DL_PACKET_DEV_INFO: {
-            if (RcChannels_dev_info_extract((uint8_t*)rx_buffer, DevInfo))
+            if (RcChannels_dev_info_extract((uint8_t *)rx_buffer, DevInfo))
                 tlm_updated |= TLM_UPDATES_DEV_INFO;
             break;
         }
         default:
             break;
     }
+#else
+#warning "TODO: handle tlm data and push to serial"
+#endif
 }
 
-static void FAST_CODE_1 PacketReceivedCallback(uint8_t *buff, uint32_t rx_us, size_t payloadSize, int32_t freq_err)
+static void FAST_CODE_1 PacketReceivedCallback(uint8_t const * buff,
+                                               uint32_t const rx_us,
+                                               size_t const payloadSize,
+                                               int32_t const freq_err)
 {
     (void)rx_us;
     (void)freq_err;
@@ -343,30 +345,30 @@ static void FAST_CODE_1 PacketReceivedCallback(uint8_t *buff, uint32_t rx_us, si
     if (buff) {
         memcpy(rx_buffer, buff, payloadSize);
         rx_buffer_size = payloadSize;
-        //DEBUG_PRINTF(" R ");
+        // DEBUG_PRINTF(" R ");
     }
 }
 
 static void FAST_CODE_1 TransmissionCompletedCallback()
 {
-    //DEBUG_PRINTF("X ");
+    // DEBUG_PRINTF("X ");
     if (tx_common_frame_frame_is_tlm()) {
         // receive tlm package
         PowerMgmt.pa_off();
         Radio->RXnb(FHSSgetCurrFreq());
         expected_tlm_counter++;
-        //DEBUG_PRINTF(" RX ");
+        // DEBUG_PRINTF(" RX ");
     }
 }
 
 ///////////////////////////////////////
 // Internal OTA implementation
 
-static void FAST_CODE_1
-GenerateSyncPacketData(uint8_t *const output, uint32_t const rxtx_counter,
-                       uint_fast8_t const numOfTxPerRc)
+static void FAST_CODE_1 GenerateSyncPacketData(uint8_t * const output,
+                                               uint32_t const rxtx_counter,
+                                               uint_fast8_t const numOfTxPerRc)
 {
-    ElrsSyncPacket_s * sync = (ElrsSyncPacket_s*)output;
+    ElrsSyncPacket_s * sync = (ElrsSyncPacket_s *)output;
     sync->cipher = SyncCipher;
     sync->fhssIndex = FHSSgetCurrIndex();
     sync->rxtx_counter = rxtx_counter;
@@ -380,11 +382,10 @@ GenerateSyncPacketData(uint8_t *const output, uint32_t const rxtx_counter,
 ///////////////////////////////////////
 // Internal OTA implementation
 
-uint_fast8_t FAST_CODE_1
-ota_packet_generate_internal(uint8_t * const tx_buffer,
-                             uint32_t const rxtx_counter,
-                             uint32_t const current_us,
-                             uint_fast8_t const hopInterval)
+uint_fast8_t FAST_CODE_1 ota_packet_generate_internal(uint8_t * const tx_buffer,
+                                                      uint32_t const rxtx_counter,
+                                                      uint32_t const current_us,
+                                                      uint_fast8_t const hopInterval)
 {
     uint16_t crc_or_type;
     uint_fast8_t payloadSize = RcChannels_payloadSizeGet();
@@ -394,17 +395,13 @@ ota_packet_generate_internal(uint8_t * const tx_buffer,
 
     // only send sync when its time and only on sync channel;
     if ((!arm_state || 1 < numOfTxPerRc) && FHSScurrSequenceIndexIsSyncChannel() &&
-        ((rxtx_counter % hopInterval) == 0) &&
-        ((rxtx_counter % numOfTxPerRc) == 0) &&
-        (sync_interval_us <= (uint32_t)(current_us - SyncPacketSent_us)))
-    {
+        ((rxtx_counter % hopInterval) == 0) && ((rxtx_counter % numOfTxPerRc) == 0) &&
+        (sync_interval_us <= (uint32_t)(current_us - SyncPacketSent_us))) {
         GenerateSyncPacketData(tx_buffer, rxtx_counter, numOfTxPerRc);
         SyncPacketSent_us = current_us;
         crc_or_type = UL_PACKET_SYNC;
-    }
-    else if (!arm_state && (rxtx_counter % numOfTxPerRc) == 0 &&
-             (TLM_MSP_STATE_SEND == tlm_msp_send) && (msp_packet_tx.type == MSP_PACKET_TLM_OTA))
-    {
+    } else if (!arm_state && (rxtx_counter % numOfTxPerRc) == 0 && (TLM_MSP_STATE_SEND == tlm_msp_send) &&
+               (msp_packet_tx.type == MSP_PACKET_TLM_OTA)) {
         /* send tlm packet if needed */
         if (RcChannels_tlm_ota_send(tx_buffer, msp_packet_tx)) {
             msp_packet_tx.sequence_nbr = 0;
@@ -417,10 +414,12 @@ ota_packet_generate_internal(uint8_t * const tx_buffer,
             tlm_msp_sent_ms = millis();
         }
         crc_or_type = UL_PACKET_MSP;
-    }
-    else
-    {
+    } else {
+#if !SERIAL_PASSTHROUGH
         RcChannels_get_packed_data(tx_buffer);
+#else
+        #warning "TODO: Copy data from serial input buff to OTA!"
+#endif
         crc_or_type = UL_PACKET_RC_DATA;
 #if CRC16_POLY_TESTING
         memcpy(tx_buffer, CRC16_POLY_PKT, sizeof(CRC16_POLY_PKT));
@@ -440,11 +439,10 @@ ota_packet_generate_internal(uint8_t * const tx_buffer,
 
 #if TARGET_HANDSET && OTA_VANILLA_ENABLED
 
-uint_fast8_t FAST_CODE_1
-ota_packet_generate_vanilla(uint8_t * const tx_buffer,
-                            uint32_t const rxtx_counter,
-                            uint32_t const current_us,
-                            uint_fast8_t const hopInterval)
+uint_fast8_t FAST_CODE_1 ota_packet_generate_vanilla(uint8_t * const tx_buffer,
+                                                     uint32_t const rxtx_counter,
+                                                     uint32_t const current_us,
+                                                     uint_fast8_t const hopInterval)
 {
     uint_fast8_t payloadSize = OTA_VANILLA_SIZE;
     const uint_fast8_t numOfTxPerRc = ExpressLRS_currAirRate->numOfTxPerRc;
@@ -453,15 +451,11 @@ ota_packet_generate_vanilla(uint8_t * const tx_buffer,
 
     // only send sync when its time and only on sync channel;
     if ((!arm_state || 1 < numOfTxPerRc) && FHSScurrSequenceIndexIsSyncChannel() &&
-        ((rxtx_counter % hopInterval) == 0) &&
-        ((rxtx_counter % numOfTxPerRc) == 0) &&
-        (sync_interval_us <= (uint32_t)(current_us - SyncPacketSent_us)))
-    {
+        ((rxtx_counter % hopInterval) == 0) && ((rxtx_counter % numOfTxPerRc) == 0) &&
+        (sync_interval_us <= (uint32_t)(current_us - SyncPacketSent_us))) {
         OTA_vanilla_SyncPacketData(tx_buffer, rxtx_counter, TLMinterval);
         SyncPacketSent_us = current_us;
-    }
-    else
-    {
+    } else {
         uint8_t NonceFHSSresult = rxtx_counter % hopInterval;
         OTA_vanilla_PackChannelData(tx_buffer, rxtx_counter, NonceFHSSresult);
     }
@@ -472,14 +466,13 @@ ota_packet_generate_vanilla(uint8_t * const tx_buffer,
 }
 #endif // TARGET_HANDSET
 
-
 ///////////////////////////////////////
 // Generic TX ISR handler
 
 static void FAST_CODE_1 SendRCdataToRF(uint32_t const current_us)
 {
-    //gpio_out_write(debug_pin_tx, 1);
-    // Called by HW timer
+    // gpio_out_write(debug_pin_tx, 1);
+    //  Called by HW timer
     uint32_t freq;
     uint32_t const rxtx_counter = _rf_rxtx_counter;
     // esp requires word aligned buffer
@@ -500,7 +493,7 @@ static void FAST_CODE_1 SendRCdataToRF(uint32_t const current_us)
 
 #if TARGET_HANDSET && OTA_VANILLA_ENABLED
     if (pl_config.rf_mode == RADIO_TYPE_128x_VANILLA)
-        payloadSize = ota_packet_generate_vanilla(tx_buffer, (rxtx_counter -1), current_us, hopInterval);
+        payloadSize = ota_packet_generate_vanilla(tx_buffer, (rxtx_counter - 1), current_us, hopInterval);
     else
 #endif // TARGET_HANDSET
         payloadSize = ota_packet_generate_internal(tx_buffer, rxtx_counter, current_us, hopInterval);
@@ -510,8 +503,8 @@ static void FAST_CODE_1 SendRCdataToRF(uint32_t const current_us)
     // Enable PA
     PowerMgmt.pa_on();
     // Debugging
-    //delayMicroseconds(random(0, 400)); // 300 ok
-    //if (random(0, 99) < 55) tx_buffer[1] = 0;
+    // delayMicroseconds(random(0, 400)); // 300 ok
+    // if (random(0, 99) < 55) tx_buffer[1] = 0;
     // Send data to rf
     Radio->TXnb(tx_buffer, payloadSize, freq);
 
@@ -524,13 +517,12 @@ send_to_rf_exit:
     // Increase TX counter
     _rf_rxtx_counter = rxtx_counter + 1;
 
-    //DEBUG_PRINTF(" T");
-    //gpio_out_write(debug_pin_tx, 0);
+    // DEBUG_PRINTF(" T");
+    // gpio_out_write(debug_pin_tx, 0);
 }
 
 ///////////////////////////////////////
-int8_t SettingsCommandHandle(uint8_t const *in, uint8_t *out,
-                             uint8_t const inlen, uint8_t &outlen)
+int8_t SettingsCommandHandle(uint8_t const * in, uint8_t * out, uint8_t const inlen, uint8_t & outlen)
 {
 #if defined(LATEST_COMMIT)
     uint8_t commit_sha[] = {LATEST_COMMIT};
@@ -541,8 +533,7 @@ int8_t SettingsCommandHandle(uint8_t const *in, uint8_t *out,
     uint8_t value = in[1];
     uint8_t modified = 0;
 
-    switch (cmd)
-    {
+    switch (cmd) {
         case ELRS_CMD_GET: // send all params
             break;
 
@@ -646,9 +637,8 @@ int8_t SettingsCommandHandle(uint8_t const *in, uint8_t *out,
 #endif
 
 #ifdef CTRL_SERIAL
-    msp_packet_parser.sendPacket(
-        &ctrl_serial, MSP_PACKET_V1_ELRS, ELRS_INT_MSP_PARAMS,
-        MSP_ELRS_INT, (buff - settings_buff), settings_buff);
+    msp_packet_parser.sendPacket(&ctrl_serial, MSP_PACKET_V1_ELRS, ELRS_INT_MSP_PARAMS, MSP_ELRS_INT,
+                                 (buff - settings_buff), settings_buff);
 #endif /* CTRL_SERIAL */
 
     // Fill response
@@ -667,7 +657,7 @@ int8_t SettingsCommandHandle(uint8_t const *in, uint8_t *out,
         pl_config.key = ELRS_EEPROM_KEY;
         pl_config.rf[rf_mode].mode = current_rate_config;
         pl_config.rf[rf_mode].power = PowerMgmt.currPower();
-        //pl_config.rf[rf_mode].tlm = ; // Set already
+        // pl_config.rf[rf_mode].tlm = ; // Set already
         platform_config_save(pl_config);
 
         // and restart timer
@@ -677,11 +667,10 @@ int8_t SettingsCommandHandle(uint8_t const *in, uint8_t *out,
     return 0;
 }
 
-
 ///////////////////////////////////////
 uint8_t SetRFLinkRate(uint8_t const rate, uint8_t const init) // Set speed of RF link (hz)
 {
-    const expresslrs_mod_settings_t *const config = get_elrs_airRateConfig(rate);
+    const expresslrs_mod_settings_t * const config = get_elrs_airRateConfig(rate);
     if (config == NULL || config == ExpressLRS_currAirRate)
         return 0; // No need to modify, rate is same
 
@@ -701,9 +690,8 @@ uint8_t SetRFLinkRate(uint8_t const rate, uint8_t const init) // Set speed of RF
     Radio->SetRxBufferSize(config->payloadSize + (config->hwCrc == HWCRC_DIS ? OTA_PACKET_CRC : 0));
     Radio->SetPacketInterval(config->interval);
     Radio->SetCaesarCipher(CRCCaesarCipher);
-    Radio->Config(config->bw, config->sf, config->cr, FHSSgetCurrFreq(),
-                  config->PreambleLen, (config->hwCrc == HWCRC_EN),
-                  config->pkt_type);
+    Radio->Config(config->bw, config->sf, config->cr, FHSSgetCurrFreq(), config->PreambleLen,
+                  (config->hwCrc == HWCRC_EN), config->pkt_type);
 
     tx_handle_set_link_rate(config->interval * config->numOfTxPerRc);
 
@@ -716,8 +704,7 @@ uint8_t SetRFLinkRate(uint8_t const rate, uint8_t const init) // Set speed of RF
 
     platform_connection_state(connectionState);
 
-    DEBUG_PRINTF("RF params configured, rate: %u (idx:%u)\n",
-        config->rate, current_rate_config);
+    DEBUG_PRINTF("RF params configured, rate: %u (idx:%u)\n", config->rate, current_rate_config);
 
     return 1;
 }
@@ -737,14 +724,12 @@ void hw_timer_stop(void)
     platform_radio_force_stop();
 }
 
-
 #ifdef CTRL_SERIAL
-static void MspOtaCommandsSend(mspPacket_t &packet)
+static void MspOtaCommandsSend(mspPacket_t & packet)
 {
     // TODO,FIXME: add a retry!!
     if (TLM_MSP_STATE_FREE != read_u8(&tlm_msp_send)) {
-        DEBUG_PRINTF("UL MSP ignored. func: %x, size: %u\n",
-                     packet.function, packet.payloadSize);
+        DEBUG_PRINTF("UL MSP ignored. func: %x, size: %u\n", packet.function, packet.payloadSize);
         return;
     }
 
@@ -761,32 +746,33 @@ static void MspOtaCommandsSend(mspPacket_t &packet)
 
 void tx_common_handle_rx_buffer(void)
 {
-    if (rx_buffer_size) {
-        process_rx_buffer(rx_buffer_size);
-        rx_buffer_size = 0;
-        platform_wd_feed();
+    uint_fast8_t size = rx_buffer_size;
+    if (!size) {
+        return;
     }
+    process_rx_buffer(size);
+    rx_buffer_size = 0;
+    platform_wd_feed();
 }
 
-int tx_common_has_telemetry(void)
+bool tx_common_has_telemetry(void)
 {
-    return (tlm_check_ratio) ? 0 : -1;
+    return !!tlm_check_ratio;
 }
 
-int tx_common_check_connection(void)
+bool tx_common_check_connection(void)
 {
     if (STATE_lost < connectionState) {
-        uint32_t current_ms = millis();
-        if (RX_CONNECTION_LOST_TIMEOUT < (uint32_t)(current_ms - LastPacketRecvMillis)) {
+        uint32_t const current_ms = millis();
+        if (RX_CONNECTION_LOST_TIMEOUT < (int32_t)(current_ms - LastPacketRecvMillis)) {
             connectionState = STATE_disconnected;
             platform_connection_state(STATE_disconnected);
             platform_set_led(red_led_state);
-            return -1;
+            return false;
         }
     }
-    return 0;
+    return true;
 }
-
 
 void tx_common_handle_ctrl_serial(void)
 {
@@ -796,15 +782,15 @@ void tx_common_handle_ctrl_serial(void)
         uint8_t in = ctrl_serial.read();
         if (msp_packet_parser.processReceivedByte(in)) {
             //  MSP received, check content
-            mspPacket_t &packet = msp_packet_parser.getPacket();
+            mspPacket_t & packet = msp_packet_parser.getPacket();
 
-            //DEBUG_PRINTF("MSP rcvd, type:%u\n", packet.type);
+            // DEBUG_PRINTF("MSP rcvd, type:%u\n", packet.type);
 
             /* Check if packet is ELRS internal */
             if ((packet.type == MSP_PACKET_V1_ELRS) && (packet.flags & MSP_ELRS_INT)) {
                 switch (packet.function) {
                     case ELRS_INT_MSP_PARAMS: {
-                        uint8_t * msg = (uint8_t*)packet.payload;
+                        uint8_t * msg = (uint8_t *)packet.payload;
                         uint8_t outlen = packet.payloadSize;
                         SettingsCommandHandle(msg, NULL, packet.payloadSize, outlen);
                         break;
@@ -826,7 +812,6 @@ void tx_common_handle_ctrl_serial(void)
 #endif // CTRL_SERIAL
 }
 
-
 void tx_common_update_link_stats(void)
 {
     // Calc LQ based on good tlm packets and receptions done
@@ -846,23 +831,22 @@ void tx_common_update_link_stats(void)
 
 bool tx_common_tlm_rx_handle(uint32_t const now)
 {
-   // Send MSP resp if allowed and packet ready
+    // Send MSP resp if allowed and packet ready
     static uint8_t retrx_count = 0;
     uint8_t const tlm_msp_tx_state = read_u8(&tlm_msp_send);
     bool const wait_resp = TLM_MSP_STATE_WAIT_RESP == tlm_msp_tx_state;
     if (tlm_msp_rcvd) {
         // Check that resp match
-        if (wait_resp && msp_packet_rx.sequence_nbr == 0 &&
-                msp_packet_rx.type == msp_packet_tx.type &&
-                msp_packet_rx.function == msp_packet_tx.function) {
+        if (wait_resp && msp_packet_rx.sequence_nbr == 0 && msp_packet_rx.type == msp_packet_tx.type &&
+            msp_packet_rx.function == msp_packet_tx.function) {
             msp_packet_rx.type = MSP_PACKET_V1_RESP; // Only v1 over OTA
             // Resp ok, free TX buffer to send next one
             write_u8(&tlm_msp_send, TLM_MSP_STATE_FREE);
             retrx_count = 0;
-            //DEBUG_PRINTF("Expected MSP response\n");
+            // DEBUG_PRINTF("Expected MSP response\n");
         } else {
-            //DEBUG_PRINTF("DL MSP rcvd. func: %x, size: %u\n",
-            //             msp_packet_rx.function, msp_packet_rx.payloadSize);
+            // DEBUG_PRINTF("DL MSP rcvd. func: %x, size: %u\n",
+            //              msp_packet_rx.function, msp_packet_rx.payloadSize);
         }
         return true; // Allow forwarding to logger
     } else if (wait_resp) {

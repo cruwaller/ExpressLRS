@@ -9,8 +9,10 @@
 #include "HwTimer.h"
 #include <stdlib.h>
 
+#if !SERIAL_PASSTHROUGH
 
 CRSF_TX DRAM_FORCE_ATTR crsf(CrsfSerial);
+
 static uint32_t DRAM_ATTR TlmSentToRadioTime;
 
 ///////////////////////////////////////
@@ -23,6 +25,7 @@ static void rc_data_cb(uint8_t const *const channels)
 static void ParamWriteHandler(uint8_t const *msg, uint16_t len)
 {
     // Called from UART handling loop (main loop)
+#if !SERIAL_PASSTHROUGH
     uint8_t resp[ELRS_LUA_BUFF_SIZE], outlen = sizeof(resp);
     int8_t ret;
     CrsfSerial.Pause();
@@ -30,6 +33,7 @@ static void ParamWriteHandler(uint8_t const *msg, uint16_t len)
     CrsfSerial.Continue();
     if (0 <= ret)
         crsf.sendLUAresponseToRadio(resp, outlen);
+#endif
 }
 
 /* Parse CRSF encapsulated MSP packet */
@@ -89,14 +93,25 @@ update_handset_sync(uint32_t const current_us)
     crsf.UpdateOpenTxSyncOffset(current_us);
 }
 
+#endif /* !SERIAL_PASSTHROUGH */
+
 void setup()
 {
+#if !SERIAL_PASSTHROUGH
     CrsfSerial.Begin(CRSF_TX_BAUDRATE_FAST);
+#else /* SERIAL_PASSTHROUGH */
+#if !defined(SERIAL_BAUD)
+#define SERIAL_BAUD 115200
+#endif
+    CrsfSerial.Begin(SERIAL_BAUD);
+#endif /* SERIAL_PASSTHROUGH */
+
     tx_common_init_globals();
     platform_setup();
     platform_set_led(0);
     DEBUG_PRINTF("ExpressLRS TX Module...\n");
 
+#if !SERIAL_PASSTHROUGH
     crsf.connected = hw_timer_init;
     crsf.disconnected = hw_timer_stop;
     crsf.ParamWriteCallback = ParamWriteHandler;
@@ -104,22 +119,29 @@ void setup()
     crsf.MspCallback = msp_data_cb;
 
     TxTimer.callbackTickPre = update_handset_sync;
-
+#endif /* SERIAL_PASSTHROUGH */
     tx_common_init();
 
+#if !SERIAL_PASSTHROUGH
     crsf.Begin();
+#else /* SERIAL_PASSTHROUGH */
+    // Start TX immediately
+    hw_timer_init();
+#endif /* SERIAL_PASSTHROUGH */
 }
 
 void loop()
 {
+#if !SERIAL_PASSTHROUGH
     uint32_t const current_ms = millis();
-    uint8_t can_send;
+#endif
 
     tx_common_handle_rx_buffer();
 
-    if (0 <= tx_common_has_telemetry())
+#if !SERIAL_PASSTHROUGH
+    if (tx_common_has_telemetry())
     {
-        if (0 <= tx_common_check_connection() &&
+        if (tx_common_check_connection() &&
             connectionState == STATE_connected &&
             TLM_REPORT_INTERVAL <= (uint32_t)(current_ms - TlmSentToRadioTime))
         {
@@ -132,7 +154,7 @@ void loop()
     }
 
     // Process CRSF packets from TX
-    can_send = crsf.handleUartIn();
+    bool const can_send = crsf.handleUartIn();
 
     // Send MSP resp if allowed and packet ready
     if (can_send && tx_common_tlm_rx_handle(current_ms))
@@ -149,6 +171,8 @@ void loop()
     }
 #endif /* CTRL_SERIAL */
 
+#endif /* SERIAL_PASSTHROUGH */
+
     platform_loop(connectionState);
     platform_wd_feed();
 }
@@ -161,5 +185,7 @@ int8_t tx_handle_msp_input(mspPacket_t &packet)
 
 void tx_handle_set_link_rate(uint32_t const interval)
 {
+#if !SERIAL_PASSTHROUGH
     crsf.setRcPacketRate(interval);
+#endif
 }

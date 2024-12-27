@@ -278,11 +278,11 @@ void CRSF_TX::processPacket(uint8_t const *input)
     };
 }
 
-uint8_t CRSF_TX::handleUartIn(void)
+bool CRSF_TX::handleUartIn(void)
 {
     int available = _dev->available();
     uint8_t *ptr;
-    uint8_t can_send = 0;
+    bool can_send = false;
 
     if (16 < available) available = 16;
     else if (available < 0) available = 0;
@@ -308,7 +308,7 @@ uint8_t CRSF_TX::handleUartIn(void)
             else if (send_buffers & SEND_GPS)
                 GpsSensorProcess();
             else
-                can_send = 1;
+                can_send = true;
         }
 
 #ifdef DBF_PIN_CRSF_BYTES_IN

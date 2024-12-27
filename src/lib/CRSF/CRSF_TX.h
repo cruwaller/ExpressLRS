@@ -30,7 +30,7 @@ public:
     void Begin(void);
 
     // Handle incoming data
-    uint8_t handleUartIn(void);
+    bool handleUartIn(void);
 
     // Send to RADIO
     void LinkStatisticsSend(LinkStatsLink_t & stats) const;

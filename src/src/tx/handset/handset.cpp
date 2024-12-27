@@ -236,7 +236,7 @@ void loop()
 
     tx_common_handle_rx_buffer();
 
-    if (0 <= tx_common_has_telemetry() && _tlm_updated) {
+    if (tx_common_has_telemetry() && _tlm_updated) {
         (void)tx_common_check_connection();
 
         // TODO: limit tlm output speed for higher ratios?

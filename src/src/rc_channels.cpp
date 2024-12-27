@@ -454,6 +454,9 @@ void FAST_CODE_1 RcChannels_channels_extract(uint8_t const *const input,
 
 void RcChannels_initRcPacket(uint_fast8_t const payloadSize)
 {
+#if SERIAL_PASSTHROUGH
+    packed_buffer_size = payloadSize - 1;
+#else
     if (payloadSize <= sizeof(RcDataPacket_s)) {
         packed_buffer_size = sizeof(RcDataPacket_s);
         channels_pack_ptr = channels_pack_legacy;
@@ -461,6 +464,7 @@ void RcChannels_initRcPacket(uint_fast8_t const payloadSize)
     }
     packed_buffer_size = sizeof(RcDataPacketFull_s);
     channels_pack_ptr = channels_pack_full;
+#endif
 }
 
 uint8_t FAST_CODE_1 RcChannels_payloadSizeGet(void)

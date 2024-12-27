@@ -4,6 +4,7 @@
 #include "rc_channels.h"
 #include "msp.h"
 #include <stdint.h>
+#include <stdbool.h>
 
 
 //// CONSTANTS ////
@@ -45,8 +46,8 @@ void tx_common_armed_state(uint8_t armed);
 #define tx_common_armed_state(...) // ignore
 #endif
 void tx_common_handle_rx_buffer(void);
-int  tx_common_has_telemetry(void);
-int  tx_common_check_connection(void);
+bool tx_common_has_telemetry(void);
+bool tx_common_check_connection(void);
 void tx_common_handle_ctrl_serial(void);
 void tx_common_update_link_stats(void);
 
