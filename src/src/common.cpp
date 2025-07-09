@@ -27,7 +27,7 @@ const expresslrs_mod_settings_t *ExpressLRS_currAirRate;
 
 static expresslrs_mod_settings_t * current_settings;
 
-
+/* clang-format off */
 //
 // https://semtech.my.salesforce.com/sfc/p/#E0000000JelG/a/2R000000HUhK/6T9Vdb3_ldnElA8drIbPYjs1wBbhlWUXej8ZMXtZXOM
 //
@@ -92,7 +92,7 @@ static expresslrs_mod_settings_t DRAM_FORCE_ATTR ExpressLRS_AirRateConfig_127x[]
     {RADIO_LORA, SX127X_BW_500_00_KHZ,  SX127X_SF_8, SX127X_CR_4_8,  20000, 750000u,  50, 8, 1000, 2000, TLM_RATIO_1_16, FHSS_1, OSD_MODE_50Hz,  OTA_PAYLOAD_SX127x, 1, HWCRC_DIS}, // 18.56ms
 };
 #endif /* RADIO_SX127x */
-
+/* clang-format on */
 
 static expresslrs_mod_settings_t* get_air_rate_config(uint8_t const type)
 {
@@ -109,7 +109,8 @@ static expresslrs_mod_settings_t* get_air_rate_config(uint8_t const type)
             return ExpressLRS_AirRateConfig_128x_FLRC;
 #endif
 #if TARGET_HANDSET && OTA_VANILLA_ENABLED
-        case RADIO_TYPE_128x_VANILLA:
+        case RADIO_TYPE_128x_VANILLA_v3:
+        case RADIO_TYPE_128x_VANILLA_v4:
             return ExpressLRS_AirRateConfig_128x_VANILLA;
 #endif
 #endif
@@ -172,8 +173,9 @@ uint8_t get_elrs_current_radio_type(void)
         return RADIO_TYPE_128x_FLRC;
 #endif
 #if TARGET_HANDSET && OTA_VANILLA_ENABLED
+    // TODO: vanilla v4
     if (current_settings == ExpressLRS_AirRateConfig_128x_VANILLA)
-        return RADIO_TYPE_128x_VANILLA;
+        return RADIO_TYPE_128x_VANILLA_v3;
 #endif
 #endif
     return RADIO_TYPE_MAX;
@@ -277,7 +279,8 @@ static RadioParameters_t* get_radio_type_cfg(uint8_t type)
             return &RadioType[RADIO_TYPE_127x];
         case RADIO_TYPE_128x:
         case RADIO_TYPE_128x_FLRC:
-        case RADIO_TYPE_128x_VANILLA:
+        case RADIO_TYPE_128x_VANILLA_v3:
+        case RADIO_TYPE_128x_VANILLA_v4:
             return &RadioType[RADIO_TYPE_128x];
     }
 #endif
@@ -302,8 +305,10 @@ uint8_t common_config_get_radio_type(uint8_t mode)
             return RADIO_TYPE_128x_FLRC;
 #endif
 #if TARGET_HANDSET && OTA_VANILLA_ENABLED
-        case RADIO_RF_MODE_2400_ISM_VANILLA:
-            return RADIO_TYPE_128x_VANILLA;
+        case RADIO_RF_MODE_2400_ISM_VANILLA_v3:
+            return RADIO_TYPE_128x_VANILLA_v3;
+        case RADIO_RF_MODE_2400_ISM_VANILLA_v4:
+            return RADIO_TYPE_128x_VANILLA_v4;
 #endif
 #endif
         default:

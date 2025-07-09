@@ -598,7 +598,8 @@ int ExpresslrsMsp::parseSerialData(uint8_t const chr)
                     settings_valid = 1;
 
 #if CONFIG_HANDSET
-                    if ((settings_region & 0x1F) == 6 /*RADIO_RF_MODE_2400_ISM_VANILLA*/) {
+                    if ((settings_region & 0x1F) == 6 /* RADIO_RF_MODE_2400_ISM_VANILLA_v3 */
+                        || (settings_region & 0x1F) == 7 /* RADIO_RF_MODE_2400_ISM_VANILLA_v4 */) {
                         aux_min_val = 50;
                     } else {
                         aux_min_val = 0;
@@ -651,20 +652,21 @@ int ExpresslrsMsp::parseSerialData(uint8_t const chr)
                 }
                 case ELRS_HANDSET_RC_DATA: {
                     rc_channels_internal_u const * const p_rc = (rc_channels_internal_u *)msp_in.payload;
-                    uint8_t iter = 0;
+                    uint8_t iter;
                     info = "RC: ";
-                    for (iter = 0; iter < TX_NUM_ANALOGS; iter++) {
+                    for (iter = 0; iter < ARRAY_SIZE(p_rc->ota_pkt.gimbal); iter++) {
                         if (iter)
                             info += '|';
-                        info += p_rc->ch[iter];
+                        info += p_rc->ota_pkt.gimbal[iter];
                     }
-                    info += " -- ";
-                    for (; iter < ARRAY_SIZE(p_rc->ch); iter++) {
-                        info += p_rc->ch[iter];
-                        info += '|';
+                    info += " AUX: ";
+                    for (iter = 0; iter < ARRAY_SIZE(p_rc->ota_pkt.aux); iter++) {
+                        if (iter)
+                            info += '|';
+                        info += p_rc->ota_pkt.aux[iter];
                     }
-                    if (eeprom_storage.laptimer_start_stop_aux < (ARRAY_SIZE(p_rc->ch) - TX_NUM_ANALOGS)) {
-                        uint16_t const aux_val = p_rc->ch[TX_NUM_ANALOGS + eeprom_storage.laptimer_start_stop_aux];
+                    if (eeprom_storage.laptimer_start_stop_aux < ARRAY_SIZE(p_rc->ota_pkt.aux)) {
+                        uint16_t const aux_val = p_rc->ota_pkt.aux[eeprom_storage.laptimer_start_stop_aux];
                         bool const state = (aux_min_val < aux_val);
                         if (laptimer_aux_last_value != state) {
                             info += " ,L:";
@@ -673,8 +675,8 @@ int ExpresslrsMsp::parseSerialData(uint8_t const chr)
                             laptimer_aux_last_value = aux_val;
                         }
                     }
-                    if (eeprom_storage.recording_start_stop_aux < (ARRAY_SIZE(p_rc->ch) - TX_NUM_ANALOGS)) {
-                        uint16_t const aux_val = p_rc->ch[TX_NUM_ANALOGS + eeprom_storage.recording_start_stop_aux];
+                    if (eeprom_storage.recording_start_stop_aux < ARRAY_SIZE(p_rc->ota_pkt.aux)) {
+                        uint16_t const aux_val = p_rc->ota_pkt.aux[eeprom_storage.recording_start_stop_aux];
                         bool const state = (aux_min_val < aux_val);
                         if (recording_aux_last_value != state) {
                             info += " ,R:";
@@ -808,13 +810,13 @@ int ExpresslrsMsp::parseCommandPriv(websoc_bin_hdr_t const * const cmd,
         }
         case WSMSGID_HANDSET_LAPTIMER_AUX: {
             uint8_t const aux_id = cmd->payload[0];
-            eeprom_storage.laptimer_start_stop_aux = (aux_id < MAX_NUM_SWITCHES) ? aux_id : UINT32_MAX;
+            eeprom_storage.laptimer_start_stop_aux = (aux_id < N_SWITCHES) ? aux_id : UINT32_MAX;
             eeprom_storage.markDirty();
             break;
         }
         case WSMSGID_HANDSET_RECORDING_AUX: {
             uint8_t const aux_id = cmd->payload[0];
-            eeprom_storage.recording_start_stop_aux = (aux_id < MAX_NUM_SWITCHES) ? aux_id : UINT32_MAX;
+            eeprom_storage.recording_start_stop_aux = (aux_id < N_SWITCHES) ? aux_id : UINT32_MAX;
             eeprom_storage.markDirty();
             break;
         }

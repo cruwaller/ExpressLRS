@@ -238,14 +238,14 @@ int HDZeroMsp::parseSerialData(uint8_t const chr)
             } else if (msp_in.function == HDZ_MSP_FUNC_BAND_CHANNEL_INDEX_SET) {
                 info = "HDZ set band and channel to ";
                 if (1 == msp_in.payloadSize) {
-                    uint16_t const band_channel = msp_in.payload[0];
-                    uint16_t const freq = getFreqByIndex(band_channel);
-                    info += band_channel;
+                    uint16_t const band_channel_idx = msp_in.payload[0];
+                    uint16_t const freq = getFreqByIndex(band_channel_idx);
+                    info += band_channel_idx;
                     info += " => ";
                     info += freq;
                     info += "MHz";
 
-                    checkFreqFromModule(freq, band_channel);
+                    checkFreqFromModule(freq, band_channel_idx);
                 } else {
                     info += "INVALID PAYLOAD LEN!";
                 }

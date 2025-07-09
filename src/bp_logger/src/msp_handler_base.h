@@ -7,8 +7,17 @@
 #include "storage.h"
 #include <stdint.h>
 
-#define VTX_BAND_MAX    6
 #define VTX_CHANNEL_MAX 8
+
+enum vtx_band_e {
+    VTX_BAND_A = 0,
+    VTX_BAND_B,
+    VTX_BAND_E,
+    VTX_BAND_F,
+    VTX_BAND_R,
+    VTX_BAND_L,
+    VTX_BAND_MAX,
+};
 
 class MspHandlerBase
 {
@@ -144,7 +153,7 @@ protected:
         {5705, 5685, 5665, 5645, 5885, 5905, 5925, 5945}, // E
         {5740, 5760, 5780, 5800, 5820, 5840, 5860, 5880}, // F / Airwave
         {5658, 5695, 5732, 5769, 5806, 5843, 5880, 5917}, // R / Immersion Raceband
-        {5333, 5373, 5413, 5453, 5493, 5533, 5573, 5613}, // L
+        {5362, 5399, 5436, 5473, 5510, 5547, 5584, 5621}, // L
     };
 
     virtual int parseCommandPriv(char const * cmd, size_t len, AsyncWebSocketClient * const client) = 0;
@@ -187,8 +196,22 @@ protected:
         }
         return freq;
     }
-    virtual int8_t getIndexByFreq(uint16_t const freq) const
+
+    uint16_t getFreqByIndex(uint8_t const index) const
     {
+        if (index >= (VTX_BAND_MAX * VTX_CHANNEL_MAX)) {
+            return 0; // Invalid index
+        }
+        uint16_t const * const p_freq = &frequency_table[0][0];
+        return p_freq[index];
+    }
+
+    int8_t getIndexByFreq(uint16_t const freq) const
+    {
+        if (freq < (VTX_BAND_MAX * VTX_CHANNEL_MAX)) {
+            // freq is already an index
+            return freq;
+        }
         if (5000 <= freq && freq <= 6000) {
             // Lookup a correct index
             uint16_t const * const p_freq = &frequency_table[0][0];
@@ -197,9 +220,6 @@ protected:
                     return iter;
                 }
             }
-        } else if (freq < (VTX_BAND_MAX * VTX_CHANNEL_MAX)) {
-            // freq is already an index
-            return freq;
         }
         return -1;
     }

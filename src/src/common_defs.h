@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #define TX_NUM_ANALOGS  4
-#define TX_NUM_MIXER    16
+#define TX_NUM_MIXER    16 // 4 analogs (TX_NUM_ANALOGS) + 12 AUX channels
 
 enum {
     GIMBAL_IDX_L1 = 0,  // L1

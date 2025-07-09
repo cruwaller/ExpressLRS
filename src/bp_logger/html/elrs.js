@@ -24,6 +24,7 @@ const elrs_settings_lookup = {
     4: {"rfidx": 2, "rates": ['500Hz', '250Hz', '125Hz', '50Hz'], "info": "2400MHz ISM (LoRa)"},
     5: {"rfidx": 3, "rates": ['1000Hz', '500Hz', '250Hz'], "info": "2400MHz ISM (FLRC)"},
     6: {"rfidx": 4, "rates": ['DVDA500Hz', 'DVDA250Hz', 'LORA500Hz', 'LORA250Hz'], "info": "2400MHz ISM (VANILLA 3.x)"},
+    7: {"rfidx": 5, "rates": ['DVDA500Hz', 'DVDA250Hz', 'LORA500Hz', 'LORA250Hz'], "info": "2400MHz ISM (VANILLA 4.x)"},
 };
 
 export function start() {

@@ -20,9 +20,7 @@
 #define ELRS4_TELEMETRY_SHIFT 2
 #define ELRS4_TELEMETRY_BYTES_PER_CALL 5
 
-
 #if TARGET_HANDSET && OTA_VANILLA_ENABLED
-
 
 #define OTA4_CRC_CALC_LEN    offsetof(OTA_Packet4_s, crcLow)
 
@@ -34,7 +32,6 @@
 
 #define ELRS_CRC14_POLY 0x2E57
 
-
 typedef struct {
     uint8_t fhssIndex;
     uint8_t nonce;
@@ -44,17 +41,20 @@ typedef struct {
     uint8_t UID3;
     uint8_t UID4;
     uint8_t UID5;
-} PACKED OTA_Sync_s;
+} PACKED OTA_Sync_v3_s;
 
 typedef struct {
-    uint8_t uplink_RSSI_1:7,
-            antenna:1;
-    uint8_t uplink_RSSI_2:7,
-            modelMatch:1;
-    uint8_t lq:7,
-            mspConfirm:1;
-    int8_t SNR;
-} PACKED OTA_LinkStats_s;
+    uint8_t fhssIndex;
+    uint8_t nonce;
+    uint8_t rfRateEnum;
+    uint8_t switchEncMode:1,
+            newTlmRatio:3,
+            geminiMode:1,
+            otaProtocol:2,
+            free:1;
+    uint8_t UID4;
+    uint8_t UID5;
+} PACKED OTA_Sync_v4_s;
 
 typedef union {
     uint8_t raw[5]; // 4x 10-bit channels, see PackUInt11ToChannels4x10 for encoding
@@ -78,29 +78,9 @@ typedef struct {
             uint8_t switches:7,
                     ch4:1;
         } rc;
-        struct {
-            uint32_t packetNum; // LittleEndian
-            uint8_t free[2];
-        } PACKED dbg_linkstats;
-        /** PACKET_TYPE_MSP **/
-        struct {
-            uint8_t packageIndex;
-            uint8_t payload[ELRS_MSP_BYTES_PER_CALL];
-        } msp_ul;
         /** PACKET_TYPE_SYNC **/
-        OTA_Sync_s sync;
-        /** PACKET_TYPE_TLM **/
-        struct {
-            uint8_t type:ELRS4_TELEMETRY_SHIFT,
-                    packageIndex:(8 - ELRS4_TELEMETRY_SHIFT);
-            union {
-                struct {
-                    OTA_LinkStats_s stats;
-                    uint8_t free;
-                } PACKED ul_link_stats;
-                uint8_t payload[ELRS4_TELEMETRY_BYTES_PER_CALL];
-            };
-        } tlm_dl; // PACKET_TYPE_TLM
+        OTA_Sync_v3_s sync_v3;
+        OTA_Sync_v4_s sync_v4;
     };
     uint8_t crcLow;
 } PACKED OTA_Packet4_s;
@@ -118,15 +98,14 @@ static_assert(sizeof(OTA_Packet_s) == OTA_VANILLA_SIZE,
 
 
 static OTA_Packet_s ota_packet_buffer;
+static uint8_t ota_version;
 uint8_t arm_channel_state;
 
 // http://users.ece.cmu.edu/~koopman/crc/c14/0x372b.txt
 // Poly: 0x2E57 (implicit+1 = 0x372B), reversed: FALSE, (HD=6 up to 57b)
 GenericLutCRC<uint16_t, ELRS_CRC14_POLY, 14> DMA_ATTR crc_vanilla;
 
-
 enum OtaSwitchMode_e { smWideOr8ch = 0, smHybridOr16ch = 1, sm12ch = 2 };
-
 
 // Convert CRSF to 0-(cnt-1), constrained between 1000us and 2000us
 static inline uint16_t FAST_CODE_1 CRSF_to_N(uint16_t val, uint16_t cnt)
@@ -144,8 +123,6 @@ static inline uint8_t FAST_CODE_1 CRSF_to_BIT(uint16_t val)
 {
     return (val >= CRSF_CHANNEL_VALUE_MID) ? 1 : 0;
 }
-
-
 
 static void FAST_CODE_2
 PackChannelDataHybridCommon(OTA_Packet4_s* const ota4, rc_channels_handset_t const *const ChannelDataIn)
@@ -225,7 +202,6 @@ GenerateChannelDataHybrid8(OTA_Packet4_s* const ota4, rc_channels_handset_t cons
     Hybrid8NextSwitchIndex = (bitclearedSwitchIndex + 1) % VANILLA_N_SWITCHES;
 }
 
-
 /*****************************************
  * PUBLIC FUNCTIONS
  *****************************************/
@@ -236,30 +212,67 @@ OTA_vanilla_processChannels(rc_channels_handset_t const *const channels)
     GenerateChannelDataHybrid8(&ota_packet_buffer.std, channels);
 }
 
+static void FAST_CODE_1
+OTA_vanilla_SyncPacketData_v3(OTA_Packet4_s* const p_ota,
+                              uint8_t const tlm_interval)
+{
+    // See https://github.com/ExpressLRS/ExpressLRS/blob/3.x.x-maintenance/src/src/common.cpp#L73
+    // 0 = DVDA500 -> 2
+    // 1 = DVDA250 -> 3
+    // 2 = LORA500 -> 4
+    // 3 = LORA250 -> 6
+    uint8_t rateIndex = current_rate_config + 2;
+    if (5 == rateIndex) rateIndex = 6; // Map LoRa 250Hz
+
+    p_ota->sync_v3.switchEncMode = smHybridOr16ch;
+    p_ota->sync_v3.newTlmRatio = tlm_interval;
+    p_ota->sync_v3.rateIndex = rateIndex;
+}
+
+static void FAST_CODE_1
+OTA_vanilla_SyncPacketData_v4(OTA_Packet4_s* const p_ota,
+                              uint8_t const tlm_interval)
+{
+    // See https://github.com/ExpressLRS/ExpressLRS/blob/master/src/include/common.h#L81
+    // 0 = DVDA500 -> 11
+    // 1 = DVDA250 -> 10
+    // 2 = LORA500 -> 9
+    // 3 = LORA250 -> 7
+    uint8_t const rateIndex = (3 == current_rate_config) ? 7 : (11 - current_rate_config);
+
+    p_ota->sync_v4.rfRateEnum = rateIndex;
+    p_ota->sync_v4.switchEncMode = smHybridOr16ch;
+    p_ota->sync_v4.newTlmRatio = tlm_interval;
+    p_ota->sync_v4.geminiMode = 0;
+    p_ota->sync_v4.otaProtocol = 0; // 0 = norma, 1 = mavling
+}
+
 void FAST_CODE_1
 OTA_vanilla_SyncPacketData(uint8_t * const tx_buff,
                            uint32_t const NonceTX,
                            uint8_t const tlm_interval)
 {
     const uint8_t UID[6] = {MY_UID};
-    uint8_t rateIndex = current_rate_config + 2;
-    if (5 == rateIndex) rateIndex = 6; // Map LoRa 250Hz
+    OTA_Packet4_s* const p_ota = (OTA_Packet4_s*)tx_buff;
+    // write the common parts
+    p_ota->type = PACKET_TYPE_SYNC;
+    p_ota->sync_v3.fhssIndex = FHSSgetCurrIndex();
+    p_ota->sync_v3.nonce = NonceTX;
+    p_ota->sync_v3.UID3 = UID[3]; // v4 will overwrite this
+    p_ota->sync_v3.UID4 = UID[4];
+    p_ota->sync_v3.UID5 = UID[5];
 
-    OTA_Packet4_s* const ota4 = (OTA_Packet4_s*)tx_buff;
-    ota4->type = PACKET_TYPE_SYNC;
-    ota4->sync.fhssIndex = FHSSgetCurrIndex();
-    ota4->sync.nonce = NonceTX;
-    ota4->sync.switchEncMode = smHybridOr16ch;
-    ota4->sync.newTlmRatio = tlm_interval;
-    ota4->sync.rateIndex = rateIndex;
-    ota4->sync.UID3 = UID[3];
-    ota4->sync.UID4 = UID[4];
-    ota4->sync.UID5 = UID[5];
+    if (3 == ota_version) {
+        OTA_vanilla_SyncPacketData_v3(p_ota, tlm_interval);
+        return;
+    }
+    //if (4 == ota_version)
+    OTA_vanilla_SyncPacketData_v4(p_ota, tlm_interval);
 }
 
 void FAST_CODE_1
-OTA_vanilla_PackChannelData(uint8_t * const tx_buff, uint32_t NonceTX,
-                            uint8_t NonceFHSSresult)
+OTA_vanilla_PackChannelData(uint8_t * const tx_buff, uint32_t const NonceTX,
+                            uint8_t const NonceFHSSresult)
 {
     (void)NonceTX;
     (void)NonceFHSSresult;
@@ -268,7 +281,7 @@ OTA_vanilla_PackChannelData(uint8_t * const tx_buff, uint32_t NonceTX,
 }
 
 void FAST_CODE_1
-OTA_vanilla_calculateCrc(uint8_t * const tx_buff, uint16_t cipher)
+OTA_vanilla_calculateCrc(uint8_t * const tx_buff, uint16_t const cipher)
 {
     OTA_Packet4_s* const ota4 = (OTA_Packet4_s*)tx_buff;
     ota4->crcHigh = 0;
@@ -276,6 +289,21 @@ OTA_vanilla_calculateCrc(uint8_t * const tx_buff, uint16_t cipher)
     uint16_t const crc = crc_vanilla.calc(tx_buff, OTA4_CRC_CALC_LEN, cipher);
     ota4->crcHigh = (crc >> 8);
     ota4->crcLow  = crc;
+}
+
+void OTA_vanilla_set_version(uint8_t const version)
+{
+    switch (version) {
+    case RADIO_TYPE_128x_VANILLA_v3:
+        ota_version = 3;
+        break;
+    case RADIO_TYPE_128x_VANILLA_v4:
+        ota_version = 4;
+        break;
+    default:
+        ota_version = 0;
+        break;
+    }
 }
 
 #endif // TARGET_HANDSET

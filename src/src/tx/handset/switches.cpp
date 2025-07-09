@@ -19,11 +19,13 @@ struct switch_init switch_gpios[] = {
     {
 #if CONCAT(SWITCH_CH_1, 1)
         .low = CONCAT(SWITCH_CH_1, 1),
+#else
+        .low = UNDEF_PIN,
 #endif
 #if CONCAT(SWITCH_CH_1, 2)
         .high = CONCAT(SWITCH_CH_1, 2)
 #else
-        .high = UNDEF_PIN
+        .high = UNDEF_PIN,
 #endif
     },
 #endif
@@ -32,11 +34,13 @@ struct switch_init switch_gpios[] = {
     {
 #if CONCAT(SWITCH_CH_2, 1)
         .low = CONCAT(SWITCH_CH_2, 1),
+#else
+        .low = UNDEF_PIN,
 #endif
 #if CONCAT(SWITCH_CH_2, 2)
         .high = CONCAT(SWITCH_CH_2, 2)
 #else
-        .high = UNDEF_PIN
+        .high = UNDEF_PIN,
 #endif
     },
 #endif
@@ -45,11 +49,13 @@ struct switch_init switch_gpios[] = {
     {
 #if CONCAT(SWITCH_CH_3, 1)
         .low = CONCAT(SWITCH_CH_3, 1),
+#else
+        .low = UNDEF_PIN,
 #endif
 #if CONCAT(SWITCH_CH_3, 2)
         .high = CONCAT(SWITCH_CH_3, 2)
 #else
-        .high = UNDEF_PIN
+        .high = UNDEF_PIN,
 #endif
     },
 #endif
@@ -58,11 +64,13 @@ struct switch_init switch_gpios[] = {
     {
 #if CONCAT(SWITCH_CH_4, 1)
         .low = CONCAT(SWITCH_CH_4, 1),
+#else
+        .low = UNDEF_PIN,
 #endif
 #if CONCAT(SWITCH_CH_4, 2)
         .high = CONCAT(SWITCH_CH_4, 2)
 #else
-        .high = UNDEF_PIN
+        .high = UNDEF_PIN,
 #endif
     },
 #endif
@@ -71,11 +79,13 @@ struct switch_init switch_gpios[] = {
     {
 #if CONCAT(SWITCH_CH_5, 1)
         .low = CONCAT(SWITCH_CH_5, 1),
+#else
+        .low = UNDEF_PIN,
 #endif
 #if CONCAT(SWITCH_CH_5, 2)
         .high = CONCAT(SWITCH_CH_5, 2)
 #else
-        .high = UNDEF_PIN
+        .high = UNDEF_PIN,
 #endif
     },
 #endif
@@ -84,11 +94,13 @@ struct switch_init switch_gpios[] = {
     {
 #if CONCAT(SWITCH_CH_6, 1)
         .low = CONCAT(SWITCH_CH_6, 1),
+#else
+        .low = UNDEF_PIN,
 #endif
 #if CONCAT(SWITCH_CH_6, 2)
         .high = CONCAT(SWITCH_CH_6, 2)
 #else
-        .high = UNDEF_PIN
+        .high = UNDEF_PIN,
 #endif
     },
 #endif
@@ -127,19 +139,35 @@ void FAST_CODE_1 switches_collect(uint16_t * const out)
     uint16_t value;
     uint8_t iter;
     for (iter = 0; iter < num_switches; iter++) {
-        if (gpio_in_valid(switches[iter].low) &&
-            !gpio_in_read(switches[iter].low))
+        bool const low_valid = gpio_in_valid(switches[iter].low);
+        bool const high_valid = gpio_in_valid(switches[iter].high);
+
+        if (!low_valid && !high_valid) {
+            // no pins defined for this switch
             value = SWITCH_MIN;
-        else if (gpio_in_valid(switches[iter].high) &&
-                 !gpio_in_read(switches[iter].high))
-            value = SWITCH_MAX;
-        else
-            value = SWITCH_MID;
+            continue;
+        }
+
+        if (!low_valid) {
+            // Use HIGH pin only
+            value = !gpio_in_read(switches[iter].high) ? SWITCH_MAX : SWITCH_MIN;
+        } else if (!high_valid) {
+            // Use LOW pin only
+            value = !gpio_in_read(switches[iter].low) ? SWITCH_MAX : SWITCH_MIN;
+        } else {
+            if (!gpio_in_read(switches[iter].low)) {
+                value = SWITCH_MIN;
+            } else if (!gpio_in_read(switches[iter].high)) {
+                value = SWITCH_MAX;
+            } else {
+                value = SWITCH_MID;
+            }
+        }
         out[iter] = value;
     }
 }
 
-uint8_t switches_get_available(void)
+uint8_t FAST_CODE_1 switches_get_available(void)
 {
     return num_switches;
 }

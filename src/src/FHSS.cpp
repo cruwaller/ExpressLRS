@@ -14,23 +14,23 @@
 #include "OTAvanilla.h"
 #endif
 
-//#define FHSS_TABLE_PRINT    1
+// #define FHSS_TABLE_PRINT    1
 #define FHSS_SEQ_TABLE_SIZE 256
 #define FREQ_CORRECTION_MAX 100000
 
 // Actual sequence of hops as indexes into the frequency list
 static uint32_t DRAM_FORCE_ATTR FHSS_sync_channel;
 static uint32_t DRAM_FORCE_ATTR FHSS_sequence_len;
-static uint8_t  DRAM_FORCE_ATTR FHSS_sequence_lut[FHSS_SEQ_TABLE_SIZE];
-static int32_t  DRAM_FORCE_ATTR FreqCorrectionMin;
-static int32_t  DRAM_FORCE_ATTR FreqCorrectionMax;
+static uint8_t DRAM_FORCE_ATTR FHSS_sequence_lut[FHSS_SEQ_TABLE_SIZE];
+static int32_t DRAM_FORCE_ATTR FreqCorrectionMin;
+static int32_t DRAM_FORCE_ATTR FreqCorrectionMax;
 
 // Runtime variables
 static uint32_t DRAM_ATTR FHSS_sequence_index;
-static int32_t  DRAM_ATTR FreqCorrection;
+static int32_t DRAM_ATTR FreqCorrection;
 static uint32_t DRAM_ATTR FHSS_frequencies[FHSS_SEQ_TABLE_SIZE];
 
-static uint32_t FHSSupdateFrequencies(uint8_t mode, uint32_t &rng_seed);
+static uint32_t FHSSupdateFrequencies(uint8_t mode, uint32_t & rng_seed);
 static void FHSSrandomiseSequence(uint32_t nbr_fhss_freqs, uint32_t rng_seed, uint8_t const mode);
 
 static void FHSSprintSequence(const uint8_t sequence_len)
@@ -114,8 +114,7 @@ uint32_t FAST_CODE_1 FHSSgetNextFreq()
     return FHSSgetCurrFreq();
 }
 
-static void CalculateFhssFrequencies(uint32_t base, uint32_t const bw,
-                                     size_t const count, float const step)
+static void CalculateFhssFrequencies(uint32_t base, uint32_t const bw, size_t const count, float const step)
 {
     size_t iter;
     for (iter = 0; iter < count; iter++) {
@@ -124,7 +123,7 @@ static void CalculateFhssFrequencies(uint32_t base, uint32_t const bw,
     }
 }
 
-static uint32_t FHSSupdateFrequencies(uint8_t const mode, uint32_t &rng_seed)
+static uint32_t FHSSupdateFrequencies(uint8_t const mode, uint32_t & rng_seed)
 {
     uint32_t freq_base = 0;
     uint32_t bandwidth = 0;
@@ -193,7 +192,8 @@ static uint32_t FHSSupdateFrequencies(uint8_t const mode, uint32_t &rng_seed)
             break;
         }
 #if OTA_VANILLA_ENABLED
-        case RADIO_TYPE_128x_VANILLA: {
+        case RADIO_TYPE_128x_VANILLA_v4:
+        case RADIO_TYPE_128x_VANILLA_v3: {
             freq_base = 2400400000;
             bandwidth = 1000000;
             band_count = 80;
@@ -205,8 +205,7 @@ static uint32_t FHSSupdateFrequencies(uint8_t const mode, uint32_t &rng_seed)
     if (!rng_seed)
         rng_seed = my_uid_crc32();
 
-    DEBUG_PRINTF("FHSS freq base:%u, bw:%u, count:%u\n",
-                 freq_base, bandwidth, band_count);
+    DEBUG_PRINTF("FHSS freq base:%u, bw:%u, count:%u\n", freq_base, bandwidth, band_count);
 
     if (freq_base)
         CalculateFhssFrequencies(freq_base, bandwidth, band_count, rf_step);
@@ -214,7 +213,6 @@ static uint32_t FHSSupdateFrequencies(uint8_t const mode, uint32_t &rng_seed)
     FreqCorrectionMax = FREQ_CORRECTION_MAX / rf_step;
     return band_count;
 }
-
 
 /**
 Requirements:
@@ -228,18 +226,16 @@ Approach:
   Iterate through the array, and for each block, swap each entry in it with
   another random entry, excluding the sync channel.
 */
-static void
-FHSSrandomiseSequence(const uint32_t nbr_fhss_freqs, const uint32_t rng_seed, uint8_t const mode)
+static void FHSSrandomiseSequence(const uint32_t nbr_fhss_freqs, const uint32_t rng_seed, uint8_t const mode)
 {
-    uint8_t const sync_channel = nbr_fhss_freqs / 2 + (mode == RADIO_TYPE_128x_VANILLA);
+    uint8_t const sync_channel =
+        nbr_fhss_freqs / 2 + (mode >= RADIO_TYPE_128x_VANILLA_v3);
     // Number of hops in the FHSS_sequence_lut list before circling back around,
     // even multiple of the number of frequencies
-    const uint32_t fhss_sequence_len =
-            (FHSS_SEQ_TABLE_SIZE / nbr_fhss_freqs) * nbr_fhss_freqs;
+    const uint32_t fhss_sequence_len = (FHSS_SEQ_TABLE_SIZE / nbr_fhss_freqs) * nbr_fhss_freqs;
     uint8_t temp, iter, offset, rand;
 
-    DEBUG_PRINTF("FHSS sequence len: %u, sync channel: %u\n",
-                 fhss_sequence_len, sync_channel);
+    DEBUG_PRINTF("FHSS sequence len: %u, sync channel: %u\n", fhss_sequence_len, sync_channel);
 
     rngSeed(rng_seed);
 

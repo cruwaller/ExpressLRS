@@ -238,11 +238,14 @@ static uint8_t SetRadioType(uint8_t const type)
         Radio = new_radio;
 
         current_rate_config = pl_config.rf[type].mode % get_elrs_airRateMax();
-        if (type == RADIO_TYPE_128x_VANILLA) {
+        if (type >= RADIO_TYPE_128x_VANILLA_v3) {
             CRCCaesarCipher = (uid_u32 & 0xffff) ^ OTA_VERSION_ID;
             // Sync word must be set To make IQ inversion correct
             Radio->SetSyncWord(uid_u32 & 0xff);
             Radio->SetSyncWordLong(my_uid_to_u32(OTA_VERSION_ID));
+#if TARGET_HANDSET && OTA_VANILLA_ENABLED
+            OTA_vanilla_set_version(type);
+#endif
         } else {
             CRCCaesarCipher = my_uid_crc16();
             SyncCipher = (CRCCaesarCipher ^ uid_u32) & SYNC_CIPHER_MASK;
@@ -499,7 +502,7 @@ static void FAST_CODE_1 SendRCdataToRF(uint32_t const current_us)
     // ------------------------------------------------------------------
 
 #if TARGET_HANDSET && OTA_VANILLA_ENABLED
-    if (pl_config.rf_mode == RADIO_TYPE_128x_VANILLA)
+    if (pl_config.rf_mode >= RADIO_TYPE_128x_VANILLA_v3)
         payloadSize = ota_packet_generate_vanilla(tx_buffer, (rxtx_counter -1), current_us, hopInterval);
     else
 #endif // TARGET_HANDSET
@@ -622,8 +625,10 @@ int8_t SettingsCommandHandle(uint8_t const *in, uint8_t *out,
             buff[4] = RADIO_RF_MODE_2400_ISM_500Hz;
         else if (rf_mode == RADIO_TYPE_128x_FLRC)
             buff[4] = RADIO_RF_MODE_2400_ISM_FLRC;
-        else if (rf_mode == RADIO_TYPE_128x_VANILLA)
-            buff[4] = RADIO_RF_MODE_2400_ISM_VANILLA;
+        else if (rf_mode == RADIO_TYPE_128x_VANILLA_v3)
+            buff[4] = RADIO_RF_MODE_2400_ISM_VANILLA_v3;
+        else if (rf_mode == RADIO_TYPE_128x_VANILLA_v4)
+            buff[4] = RADIO_RF_MODE_2400_ISM_VANILLA_v4;
     }
 #if DOMAIN_BOTH
     buff[4] |= ExLRS_RF_MODE_DUAL;

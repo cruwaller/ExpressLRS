@@ -35,13 +35,13 @@ rc_data_collect(uint32_t const current_us)
 #endif
     uint16_t const channelMax =
 #if OTA_VANILLA_ENABLED
-        (pl_config.rf_mode == RADIO_TYPE_128x_VANILLA) ?
+        (RADIO_TYPE_128x_VANILLA_v3 <= pl_config.rf_mode) ?
             OTA_vanilla_get_channelMaxValue():
 #endif
             RcChannels_channelMaxValueGet();
     uint16_t const channelMin =
 #if OTA_VANILLA_ENABLED
-        (pl_config.rf_mode == RADIO_TYPE_128x_VANILLA) ?
+        (RADIO_TYPE_128x_VANILLA_v3 <= pl_config.rf_mode) ?
             OTA_vanilla_get_channelMinValue():
 #endif
             ANALOG_MIN_VAL;
@@ -85,7 +85,7 @@ rc_data_collect(uint32_t const current_us)
     }
     // process channel data into OTA packet
 #if OTA_VANILLA_ENABLED
-    if (pl_config.rf_mode == RADIO_TYPE_128x_VANILLA) {
+    if (RADIO_TYPE_128x_VANILLA_v3 <= pl_config.rf_mode) {
         // map range for vanilla code
         for (iter = TX_NUM_ANALOGS; iter < num_channels; iter++) {
             rc_data.ch[iter] = MAP_U16(rc_data.ch[iter],

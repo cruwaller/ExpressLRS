@@ -84,46 +84,4 @@ private:
     }
 
     void checkFreqFromModule(uint16_t freq, uint8_t index) const;
-
-    uint16_t getFreqByIndex(uint8_t index) const
-    {
-        if (index == ((3 * 8) + 1))
-            return 5760; // F2
-        if (index == ((3 * 8) + 3))
-            return 5800; // F4
-        index -= 4 * 8;
-        if (index <= 7)
-            return 5658U + (37U * index);
-        return 0;
-    }
-
-    int8_t getIndexByFreq(uint16_t const freq) const
-    {
-        // MAP freq to HDZ supported channel indeces
-        switch (freq) {
-            case 5760: // F2
-                return 3 * 8 + 1;
-            case 5800: // F4
-                return 3 * 8 + 3;
-            case 5658: // R1
-                return 4 * 8 + 0;
-            case 5695: // R2
-                return 4 * 8 + 1;
-            case 5732: // R3
-                return 4 * 8 + 2;
-            case 5769: // R4
-                return 4 * 8 + 3;
-            case 5806: // R5
-                return 4 * 8 + 4;
-            case 5843: // R6
-                return 4 * 8 + 5;
-            case 5880: // R7
-                return 4 * 8 + 6;
-            case 5917: // R8
-                return 4 * 8 + 7;
-            default:
-                break;
-        }
-        return -1;
-    }
 };

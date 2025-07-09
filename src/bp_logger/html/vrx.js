@@ -3,7 +3,8 @@ export let cmn = common;
 
 // HDZero supported bands and channels
 const hdzero_channelFreqTable = {
-  "F": [  -1, 5760,   -1, 5800,   -1,   -1,   -1,   -1], // F / Airwave
+  "E": [5705,   -1,   -1,   -1,   -1,   -1,   -1,   -1], // E
+  "F": [5740, 5760,   -1, 5800,   -1,   -1,   -1,   -1], // F / Airwave
   "R": [5658, 5695, 5732, 5769, 5806, 5843, 5880, 5917], // R / Immersion Raceband
 };
 

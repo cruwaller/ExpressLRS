@@ -6,8 +6,8 @@
  * be sent over the radio link.
  */
 
-#ifndef H_OTA
-#define H_OTA
+#ifndef H_VANILLA_OTA
+#define H_VANILLA_OTA
 
 #include "msp.h"            // just to make pio happy
 #include "RadioInterface.h" // just to make pio happy
@@ -59,6 +59,8 @@ void OTA_vanilla_PackChannelData(uint8_t * const TXdataBuffer, uint32_t NonceTX,
 
 void OTA_vanilla_calculateCrc(uint8_t * const TXdataBuffer, uint16_t cipher);
 
+void OTA_vanilla_set_version(uint8_t version);
+
 #endif // TARGET_HANDSET
 
-#endif // H_OTA
+#endif // H_VANILLA_OTA
